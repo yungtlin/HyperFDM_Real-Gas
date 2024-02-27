@@ -1,0 +1,11 @@
+# python libs
+*.pyc
+__pycache__/
+
+# testing cases
+test*
+debug*
+archive/
+
+# data
+*.dat

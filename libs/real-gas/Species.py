@@ -35,11 +35,11 @@ class Species:
         self.R = self.k/self.m
 
     def set_physical_constants(self, constants):
-        theta_r, theta_v, theta_d, g_0, g_1, theta_1, sigma = constants
+        theta_r, theta_v, theta_z, g_0, g_1, theta_1, sigma = constants
 
         self.theta_r = theta_r
         self.theta_v = theta_v
-        self.theta_d = theta_d
+        self.theta_z = theta_z
         self.g_0 = g_0
         self.g_1 = g_1
         self.theta_1 = theta_1
@@ -172,17 +172,15 @@ class Monatomic(Species):
     def set_class_specific(self):
         pass 
 
-    # [theta_d, g_0, g_1, theta_1]
+    # [theta_z, g_0, g_1, theta_1]
     def set_physical_constants(self, constants):
-        theta_d, g_0, g_1, theta_1 = constants
-        self.theta_d = theta_d
+        theta_z, g_0, g_1, theta_1 = constants
+        self.theta_z = theta_z
         self.g_0 = g_0
         self.g_1 = g_1
         self.theta_1 = theta_1
 
-        # mode 1: e_0 = 0
-        # mode 2: e_0 = (self.theta_d*self.k)/(2*self.m)
-        self.e_0 = (self.theta_d*self.k)/(2*self.m)
+        self.e_0 = self.theta_z*self.k/self.m
 
     def compute_all(self):
         self.f_trans, self.e_trans = self.translational_mode()
@@ -204,21 +202,20 @@ class Diatomic(Species):
     def set_class_specific(self):
         pass 
 
-    # [theta_r, theta_v, theta_d, g_0, g_1, theta_1, sigma]
+    # [theta_r, theta_v, theta_z, g_0, g_1, theta_1, sigma]
     def set_physical_constants(self, constants):
-        theta_r, theta_v, theta_d, g_0, g_1, theta_1, sigma = constants
+        theta_r, theta_v, theta_z, g_0, g_1, theta_1, sigma = constants
 
         self.theta_r = theta_r
         self.theta_v = theta_v
-        self.theta_d = theta_d
+        self.theta_z = theta_z
         self.g_0 = g_0
         self.g_1 = g_1
         self.theta_1 = theta_1
         self.sigma = sigma
 
-        # mode 1: e_0 = -self.theta_d*self.k/self.m
-        # mode 2: e_0 = 0
-        self.e_0 = 0
+        # mode 3: e_0 = R*theta_z
+        self.e_0 = self.theta_z*self.k/self.m
 
     def compute_all(self):
         self.f_trans, self.e_trans = self.translational_mode()
@@ -239,39 +236,4 @@ class Diatomic(Species):
 
 
 if __name__ == "__main__":
-    # Macro
-    T = 5000
-
-    ## Monatomic ##
-    # [species name, atomic number, T]
-    # [g_0, g_1, theta_1]
-    comp_N = {"N": 1}
-    species_N = [comp_N, 14, T]
-    constants_N = [113000, 4, 0, 0]
-    N = Monatomic(species_N, constants_N)
-
-    ## Diatomic ##
-    # [species name, atomic number, T]
-    # [theta_r, theta_v, theta_d, g_0, g_1, theta_1, sigma]
-    # sigma = 1, heteronuclear (e.g. NO)
-    # sigma = 2, homonuclear (e.g. N_2)
-    comp_N2 = {"N": 2}
-    species_N2 = [comp_N2, 28, T]
-    constants_N2 = [2.9, 3390, 113000, 1, 0, 0, 2]
-    N_2 = Diatomic(species_N2, constants_N2)
-
-    comp_O2 = {"O": 2}
-    species_O2 = [comp_O2, 32, 1000]
-    constants_O2 = [2.1, 2270, 59500, 3, 2, 11390, 2]
-    O_2 = Diatomic(species_O2, constants_O2)
-
-    # equilibrium consant
-    k = N_2.k
-    theta_D = N_2.theta_d
-    K_p = 1/(k*T)*(N_2.fQ_int)/(N.fQ_int**2)*np.exp(theta_D/T)
-
-    p = 101325
-
-    O_2.compute_entropy(p)
-    print(O_2.s_vib)
-    #print("%.3e"%K_p)
+    pass

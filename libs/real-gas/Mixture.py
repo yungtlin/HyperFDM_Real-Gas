@@ -115,6 +115,8 @@ class Mixture:
         self.set_species(species_list)
         self.set_reaction(reaction_list)
 
+        self.init_global()
+
     def set_species(self, species_list):
         self.species_list = species_list
         self.n_species = len(species_list)
@@ -122,6 +124,9 @@ class Mixture:
     def set_reaction(self, reaction_list):
         self.reaction_list = reaction_list
         self.n_reaction = len(reaction_list)
+
+    def init_global(self):
+        self.R_hat = self.species_list[0].R_hat
 
     def set_T(self, T):
         self.T = T
@@ -152,18 +157,24 @@ class Mixture:
         self.p_all = solve_constant_p(p, self.ratio_all, K_p_O2, K_p_N2)
         self.compute_all()
 
+    def compute_rhoT1(self, rho, T):
+        self.rho_mix = rho
+        self.set_T(T)
+
+        R_hat = self.species_list[0].R_hat
+        K_p_all = self.compute_K_p(T)
+
+        eta_all = solve_rhoT1(self, K_p_all[0])
+
+        self.compute_all_eta(eta_all)
+        self.rho_mix = rho
+
     def compute_K_p(self, T):
         
         K_p_all = np.zeros(self.n_reaction)
         for idx, reaction in enumerate(self.reaction_list):
             reaction.compute_K_p(T)
             K_p_all[idx] = reaction.K_p
-
-        # overwrite
-        K_p_O2 = 12.19*101325
-        K_p_N2 = 0.7899e-4*101325
-
-        K_p_all = np.array([K_p_O2, K_p_N2])
 
         return K_p_all
 
@@ -186,6 +197,13 @@ class Mixture:
         self.h_mix = self.e_mix + self.R_mix*self.T
 
         self.rho_mix = self.p_mix/(self.R_mix*self.T)
+
+    def compute_all_eta(self, eta_all):
+        R_hat = self.species_list[0].R_hat
+        self.p_all = self.rho_mix*R_hat*self.T*eta_all
+
+        self.compute_all()
+
 
     #########
     # Print #
@@ -210,77 +228,27 @@ class Mixture:
 #####################
 # Specialize Solver #
 #####################
-def solve_constant_p(p_atm, O2N_ratio, K_p_O2, K_p_N2,
-        max_iter=1000, tol=1e-8):
-    # initial guess    
-    denom = 1 + O2N_ratio
-    p_N0 = p_atm/denom
-    p_O0 = O2N_ratio*p_N0
+def solve_rhoT1(mixture, K_p):
+    rho = mixture.rho_mix
+    R_hat = mixture.R_hat
+    T = mixture.T
 
-    p_0 = np.array([p_O0, p_N0])
+    M_hat_all = np.zeros(mixture.n_species)
+    eta_all = np.zeros(mixture.n_species)
 
-    res_hist = []
-    for iteration in range(max_iter):
-        # equlibrium
-        p_O, p_O2 = solve_type1(p_0[0], K_p_O2)
-        p_N, p_N2 = solve_type1(p_0[1], K_p_N2)
+    for idx, species in enumerate(mixture.species_list):
+        M_hat_all[idx] = species.M_hat
 
-        # dissociation rate 
-        alpha = p_O/(2*p_O2 + p_O)
-        beta = p_N/(2*p_N2 + p_N)
-        p_0_new = solve_type2(p_atm, O2N_ratio, alpha, beta)
+    C = K_p/(rho*R_hat*T)
 
-        # post iteration
-        chg = p_0_new - p_0
-        res = abs(chg[0])
-        res_hist += [res]
-        p_0 = p_0_new
+    a = 1/C
+    b = M_hat_all[1]/M_hat_all[0]
+    c = -1/M_hat_all[0]
 
-        if res < tol:
-            break
+    eta_all[1] = (-b + np.sqrt(b**2 - 4*a*c))/(2*a)
+    eta_all[0] = (1 - M_hat_all[1]*eta_all[1])/M_hat_all[0]
 
-    p_O, p_O2 = solve_type1(p_0[0], K_p_O2)
-    p_N, p_N2 = solve_type1(p_0[1], K_p_N2)
-
-
-    return np.array([p_N2, p_O2, p_N, p_O])
-    
-
-# type_1 X2 = 2X
-# K_p = (p_X^2)/p_X_2
-def solve_type1(p_0, K_p):
-    a = 1
-    b = K_p
-    c = -K_p*p_0
-
-    p_x = (-b + np.sqrt(b**2 - 4*a*c))/(2*a)
-
-    p_x2 = p_0 - p_x
-
-    return np.array([p_x, p_x2])
-
-# p_A0 + p_B0 = p_0
-# (1 + beta)p_A0/(1 + alpha)p_B0 = a
-def solve_type2(p_0, a, alpha, beta):
-
-    A = np.array([[1, 1], [1 + beta, -a*(1 + alpha)]])
-    b = np.array([p_0, 0])
-
-    x = np.linalg.solve(A, b)
-
-    return x
+    return eta_all
 
 if __name__ == "__main__":
-    from gas_model import get_model1
-
-    model1 = get_model1() # N2, O2, N, O, 
-
-    # N2, O2, N, O
-    model1.init_composition([0.79, 0.21, 0, 0])
-
-    p_atm = 0.1*101325
-    T = 4500
-    model1.compute_pT(p_atm, T)
-
-    print("Density: %.3e"%model1.rho_mix)
-    print("Specific enthalpy: %.3e"%model1.h_mix)
+    pass

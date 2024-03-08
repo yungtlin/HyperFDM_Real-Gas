@@ -82,10 +82,44 @@ def get_model_hw5():
 
     return model_hw5
 
+def get_model_RG8():
+    N_2, O_2, NO, N, O, Np, Op, em = get_8_species()
+
+    # N_2 = 2N
+    reactant = [[1, N_2]]
+    product = [[2, N]]
+    eqn_N2 = Reaction(reactant, product)
+
+    # O_2 = 2O
+    reactant = [[1, O_2]]
+    product = [[2, O]]
+    eqn_O2 = Reaction(reactant, product)
+
+    # NO = N + O
+    reactant = [[1, NO]]
+    product = [[1, N], [1, O]]
+    eqn_NO = Reaction(reactant, product)
+
+    # N = N+ + e-
+    reactant = [[1, N]]
+    product = [[1, Np], [1, em]]
+    eqn_Np = Reaction(reactant, product)
+
+    # O = O+ + e-
+    reactant = [[1, O]]
+    product = [[1, Op], [1, em]]
+    eqn_Op = Reaction(reactant, product)
+
+    species_list = [N_2, O_2, NO, N, O, Np, Op, em]
+    reaction_list = [eqn_N2, eqn_O2, eqn_NO, eqn_Np, eqn_Op]
+
+    model_RG8 = Mixture(species_list, reaction_list)
+
+    return model_RG8
+
+
 if __name__ == "__main__":
-    get_model_hw5()
+    model = get_model_RG8()
 
-
-
-
+    model.print_info()
 

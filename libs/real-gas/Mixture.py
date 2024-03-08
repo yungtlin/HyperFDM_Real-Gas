@@ -2,6 +2,7 @@
 # Modules #
 ###########
 import numpy as np
+from scipy.optimize import fsolve, newton, root
 
 ############
 # Reaction #
@@ -139,22 +140,35 @@ class Mixture:
 
         w_array = np.array(weights)
         self.x0_all = w_array/np.sum(w_array)
-        
+
+        xM_all = np.zeros(self.x0_all.shape)
+        for idx, species in enumerate(self.species_list):
+            xM_all[idx] = self.x0_all[idx]*species.M_hat
+        self.M_bar_mix0 = np.sum(xM_all) # weight per mole
+
+
         # O/N
-        self.ratio_all = self.get_ratio(self.species_list, self.x0_all)
+        self.ratio_NO = self.get_ratio(self.species_list, self.x0_all)
 
     def get_ratio(self, species_list, c):
-        return c[1]/c[0]
+        return c[0]/c[1]
 
     ###########
     # Compute #
     ###########
-    def compute_pT(self, p, T):
+    def compute_pT(self, p_mix, T, p_s0=[]):
+
         self.set_T(T)
+        if len(p_s0) == 0:
+            p_all = p_mix*self.x0_all + 1e-20
+        else: 
+            assert len(p_s0) == len(self.species_list)
+            p_all = p_s0   
 
-        K_p_O2, K_p_N2 = self.compute_K_p(T)
+        K_p_all = self.compute_K_p(T)
+        ratio_NO = self.ratio_NO
 
-        self.p_all = solve_constant_p(p, self.ratio_all, K_p_O2, K_p_N2)
+        self.p_all = solve_pT_RG8_newton(p_all, p_mix, K_p_all, ratio_NO)
         self.compute_all()
 
     def compute_rhoT1(self, rho, T):
@@ -170,7 +184,6 @@ class Mixture:
         self.rho_mix = rho
 
     def compute_K_p(self, T):
-        
         K_p_all = np.zeros(self.n_reaction)
         for idx, reaction in enumerate(self.reaction_list):
             reaction.compute_K_p(T)
@@ -178,7 +191,7 @@ class Mixture:
 
         return K_p_all
 
-    # with p_all
+    # required self.p_all computed
     def compute_all(self):
         self.p_mix = np.sum(self.p_all)
         self.x_all = self.p_all/self.p_mix
@@ -197,6 +210,12 @@ class Mixture:
         self.h_mix = self.e_mix + self.R_mix*self.T
 
         self.rho_mix = self.p_mix/(self.R_mix*self.T)
+
+        self.eta_all = self.p_all/(self.rho_mix*self.R_hat*self.T)
+
+        M_bar_mix = 1/np.sum(self.eta_all)
+        self.Z = self.M_bar_mix0/M_bar_mix
+
 
     def compute_all_eta(self, eta_all):
         R_hat = self.species_list[0].R_hat
@@ -249,6 +268,100 @@ def solve_rhoT1(mixture, K_p):
     eta_all[0] = (1 - M_hat_all[1]*eta_all[1])/M_hat_all[0]
 
     return eta_all
+
+def solve_pT_RG8_newton(p_0_all, p_mix, K_p_all, ratio_NO,
+        omega_min=0.3, max_iter=2000, tol=1e-5):
+    
+    p_all = np.array(p_0_all)
+
+    res = res_RG8(p_all, p_mix, K_p_all, ratio_NO).reshape((-1, 1))
+    for iteration in range(max_iter):
+        
+        jac = res_RG8_prime(p_all, p_mix, K_p_all, ratio_NO)
+        jac_inv = np.linalg.inv(jac)
+        dp = -np.matmul(jac_inv, res).reshape(-1)
+
+        x = np.max(np.abs(dp))
+        omega = 1 - (1 - omega_min)*np.exp(-1/x)
+
+        p_all += omega*dp
+
+        for idx, p in enumerate(p_all):
+            if p < 0:
+                p_all[idx] = abs(p_all[idx])/2
+
+        res = res_RG8(p_all, p_mix, K_p_all, ratio_NO).reshape((-1, 1))
+        error = np.max(np.abs(res))
+
+        if error < tol:
+            break
+
+    print("Newton iterations: %i, error: %.5e"%(iteration, error))
+
+    return p_all
+
+def res_RG8(p, p_mix, K_p_all, ratio_NO):
+    res = np.zeros(8)
+
+    # idx| 0   1   2   3   4   5   6   7
+    # sp | N2, O2, NO, N,  O,  N+, O+, e-, 
+
+    res[0] =   p[3]**2/p[0] - K_p_all[0]
+    res[1] =   p[4]**2/p[1] - K_p_all[1]
+    res[2] = p[3]*p[4]/p[2] - K_p_all[2]
+    res[3] = p[5]*p[7]/p[3] - K_p_all[3]
+    res[4] = p[6]*p[7]/p[4] - K_p_all[4]
+
+    res[5] = (2*p[0] + p[2] + p[3] + p[5])/\
+        (2*p[1] + p[2] + p[4] + p[6]) - ratio_NO
+
+    res[6] = p[5] + p[6] - p[7]
+
+    res[7] = np.sum(p) - p_mix
+
+    return res
+
+def res_RG8_prime(p, p_mix, K_p_all, ratio_NO):
+    res_prime = np.zeros((8, 8))
+
+    # reaction equlibrium
+    res_prime[0, 0] = -p[3]**2/p[0]**2
+    res_prime[0, 3] = 2*p[3]/p[0]
+
+    res_prime[1, 1] = -p[4]**2/p[1]**2
+    res_prime[1, 4] = 2*p[4]/p[1]
+
+    res_prime[2, 2] = -p[3]*p[4]/p[2]**2
+    res_prime[2, 3] = p[4]/p[2]
+    res_prime[2, 4] = p[3]/p[2]
+
+    res_prime[3, 3] = -p[5]*p[7]/p[3]**2
+    res_prime[3, 5] = p[7]/p[3]
+    res_prime[3, 7] = p[5]/p[3]
+
+    res_prime[4, 4] = -p[6]*p[7]/p[4]**2
+    res_prime[4, 6] = p[7]/p[4]
+    res_prime[4, 7] = p[6]/p[4]
+
+    numer = 2*p[0] + p[2] + p[3] + p[5]
+    denom = 2*p[1] + p[2] + p[4] + p[6]
+
+    # equlibrium
+    res_prime[5, 0] = 2/denom
+    res_prime[5, 1] = -2*numer/denom**2
+    res_prime[5, 2] = 1/denom - numer/denom**2
+    res_prime[5, 3] = 1/denom
+    res_prime[5, 4] = -numer/denom**2
+    res_prime[5, 5] = 1/denom
+    res_prime[5, 6] = -numer/denom**2
+
+    res_prime[6, 5] = 1
+    res_prime[6, 6] = 1
+    res_prime[6, 7] = -1
+
+    res_prime[7] = 1
+
+    return res_prime
 
 if __name__ == "__main__":
     pass

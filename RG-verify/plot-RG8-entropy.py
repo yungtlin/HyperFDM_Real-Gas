@@ -21,7 +21,7 @@ if __name__ == "__main__":
     n_p, n_T, n_U = data_RG8.shape
 
     # load ref. data (Hansen-1958a)
-    file_csv = "csv/compressibility.csv"
+    file_csv = "csv/entropy.csv"
     data_csv = np.loadtxt(file_csv, skiprows=1, delimiter=",")
     
     # plot setting
@@ -46,7 +46,7 @@ if __name__ == "__main__":
             p_all = data_RG8[p_idx, T_idx, 2:]
 
             model.update_p_all(T, p_all)
-            y = model.Z
+            y = model.Z*model.s_mix*model.M_hat_mix/model.R_hat
 
             y_list += [y]
 
@@ -75,17 +75,17 @@ if __name__ == "__main__":
 
 
     xlim = [0, 16000]
-    ylim = [0, 4]
+    ylim = [0, 140]
 
     ax.set_xticks(np.linspace(xlim[0], xlim[1], 9))
     ax.set_xticks(np.linspace(xlim[0], xlim[1], 33), minor=True)
-    ax.set_yticks(np.linspace(ylim[0], ylim[1], 5))
-    ax.set_yticks(np.linspace(ylim[0], ylim[1], 21), minor=True)
+    ax.set_yticks(np.linspace(ylim[0], ylim[1], 8))
+    ax.set_yticks(np.linspace(ylim[0], ylim[1], 29), minor=True)
 
-    plt.ylabel(r"Compressibility ($Z$)", fontsize=14)
+    plt.ylabel(r"Entropy $\left(\frac{ZS}{R}\right)$", fontsize=14)
     plt.xlabel(r"Temperature ($T$)", fontsize=14)
 
-    plt.ylim(ylim)
+    #plt.ylim(ylim)
     plt.xlim([0, 15000])
     plt.grid(which="both")
     plt.show()

@@ -184,6 +184,7 @@ class Mixture:
         self.rho_mix = rho
 
     def compute_K_p(self, T):
+        self.set_T(T)
         K_p_all = np.zeros(self.n_reaction)
         for idx, reaction in enumerate(self.reaction_list):
             reaction.compute_K_p(T)
@@ -230,6 +231,14 @@ class Mixture:
 
         self.compute_all()
 
+    ##########
+    # Update #
+    ##########
+    def update_p_all(self, T, p_all):
+        assert len(p_all) == self.n_species
+        self.set_T(T)
+        self.p_all = p_all
+        self.compute_all()
 
     #########
     # Print #

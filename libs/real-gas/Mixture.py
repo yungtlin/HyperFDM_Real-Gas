@@ -2,7 +2,7 @@
 # Modules #
 ###########
 import numpy as np
-from scipy.optimize import fsolve, newton, root
+#from scipy.optimize import fsolve, newton, root
 
 ############
 # Reaction #
@@ -160,7 +160,7 @@ class Mixture:
 
         self.set_T(T)
         if len(p_s0) == 0:
-            p_all = p_mix*self.x0_all + 1e-20
+            p_all = p_mix*self.x0_all + 1e-20 # prevent zero division
         else: 
             assert len(p_s0) == len(self.species_list)
             p_all = p_s0   
@@ -191,22 +191,29 @@ class Mixture:
 
         return K_p_all
 
-    # required self.p_all computed
+    # required p_all computed
     def compute_all(self):
         self.p_mix = np.sum(self.p_all)
         self.x_all = self.p_all/self.p_mix
 
         xM_all = np.zeros(self.n_species)
         e_all = np.zeros(self.n_species)
+        s_all = np.zeros(self.n_species)
 
         for idx, species in enumerate(self.species_list):
             xM_all[idx] = self.x_all[idx]*species.M_hat
             e_all[idx] = species.e_total
 
-        self.c_all = xM_all/np.sum(xM_all)
-        self.R_mix = species.R_hat/np.sum(xM_all)
-        
+            species.compute_entropy(self.p_all[idx])
+            s_all[idx] = species.s_total 
+
+        self.M_hat_mix = np.sum(xM_all)
+        self.c_all = xM_all/self.M_hat_mix
+        self.R_mix = species.R_hat/self.M_hat_mix
+
         self.e_mix = np.sum(self.c_all*e_all)
+        self.s_mix = np.sum(self.c_all*s_all)
+
         self.h_mix = self.e_mix + self.R_mix*self.T
 
         self.rho_mix = self.p_mix/(self.R_mix*self.T)
@@ -270,7 +277,7 @@ def solve_rhoT1(mixture, K_p):
     return eta_all
 
 def solve_pT_RG8_newton(p_0_all, p_mix, K_p_all, ratio_NO,
-        omega_min=0.3, max_iter=2000, tol=1e-5):
+        omega_min=1, max_iter=1000, tol=1e-5):
     
     p_all = np.array(p_0_all)
 
@@ -281,16 +288,23 @@ def solve_pT_RG8_newton(p_0_all, p_mix, K_p_all, ratio_NO,
         jac_inv = np.linalg.inv(jac)
         dp = -np.matmul(jac_inv, res).reshape(-1)
 
-        x = np.max(np.abs(dp))
-        omega = 1 - (1 - omega_min)*np.exp(-1/x)
+        # Adaptive URF updating
+        #x = np.max(np.abs(dp))
+        #omega = 1 - (1 - omega_min)*np.exp(-1/x)
 
-        p_all += omega*dp
+        # Linear updating
+        omega = 1
 
+        dy = omega*dp
         for idx, p in enumerate(p_all):
-            if p < 0:
-                p_all[idx] = abs(p_all[idx])/2
+            y = p_all[idx] + dy[idx]
 
-        res = res_RG8(p_all, p_mix, K_p_all, ratio_NO).reshape((-1, 1))
+            if y  < 0:
+                p_all[idx] = abs(p_all[idx])/2
+            else:
+                p_all[idx] = y
+
+        res = res_RG8(p_all, p_mix, K_p_all, ratio_NO)
         error = np.max(np.abs(res))
 
         if error < tol:
@@ -318,6 +332,14 @@ def res_RG8(p, p_mix, K_p_all, ratio_NO):
     res[6] = p[5] + p[6] - p[7]
 
     res[7] = np.sum(p) - p_mix
+
+    c = np.zeros(8)
+    c[:5] = K_p_all
+    c[5] = ratio_NO
+    c[6] = 1
+    c[7] = p_mix
+
+    res /= c
 
     return res
 
@@ -360,6 +382,14 @@ def res_RG8_prime(p, p_mix, K_p_all, ratio_NO):
     res_prime[6, 7] = -1
 
     res_prime[7] = 1
+
+    c = np.zeros(8)
+    c[:5] = K_p_all
+    c[5] = ratio_NO
+    c[6] = 1
+    c[7] = p_mix
+    c = c.reshape((-1, 1))
+    res_prime = res_prime/c
 
     return res_prime
 

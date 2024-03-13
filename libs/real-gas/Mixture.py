@@ -210,6 +210,7 @@ class Mixture:
         # imaginary values
         a = np.sqrt(dp/drho)
         
+        return a
 
     # required p_all computed
     def compute_all(self):
@@ -433,6 +434,7 @@ def get_RG8_a_jacobian(mixture, dT=1e-3):
     K_p_all_0 = mixture.compute_K_p(T0)
     mixture.compute_all()
     s_mix_0 = mixture.s_mix
+    p_all = mixture.p_all
 
     dK_pdT = (K_p_all_1 - K_p_all_0)/dT
     dsdT = (s_mix_1 - s_mix_0)/dT
@@ -499,9 +501,10 @@ def get_RG8_a_jacobian(mixture, dT=1e-3):
         Jacobian[9, idx] = species.M_hat*species.s_total
 
     Jacobian[8, -2] = np.sum(eta_all)*R*T0
-    Jacobian[8, -2] = np.sum(eta_all)*rho*R
+    Jacobian[8, -1] = np.sum(eta_all)*rho*R
 
-    Jacobian[9, -2] = dsdT
+    Jacobian[9, -2] = np.sum(-eta_all**2*R**2*T0/p_all)
+    Jacobian[9, -1] = dsdT
 
     return Jacobian
 

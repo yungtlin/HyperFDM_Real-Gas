@@ -20,16 +20,24 @@ if __name__ == "__main__":
     data_RG8 = np.load(file, mmap_mode="r")
     n_p, n_T, n_U = data_RG8.shape
 
-    p_idx = 2
-    T_idx = 150
+    c_table = []
 
-    data_info = data_RG8[p_idx, T_idx]
+    for p_idx in range(n_p):
+        c_list = []
 
-    p = data_info[0]
-    T = data_info[1]
-    p_all = data_info[2:]
-    model.update_p_all(T, p_all)
+        for T_idx in range(1, n_T):
+            data_info = data_RG8[p_idx, T_idx]
 
+            p = data_info[0]
+            T = data_info[1]
+            p_all = data_info[2:]
+            model.update_p_all(T, p_all)
 
-    model.compute_a()
+            rho = model.rho_mix
 
+            a = model.compute_a()
+            c = a**2*rho/p
+
+            c_list += [c]
+        c_table += [c_list]
+    print(c_table)

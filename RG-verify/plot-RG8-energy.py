@@ -55,22 +55,22 @@ if __name__ == "__main__":
         
         T_csv = data_csv[:, 0]
         y_csv = data_csv[:, p_idx + 1]
-        ax.plot(T_csv, y_csv, "x", color=colors[p_idx])
+        ax.plot(T_csv, y_csv, "d", color=colors[p_idx])
 
     lines = ax.get_lines()
-
     # Legend (color)
     label1 = ["0.0001", "0.001", "0.01", "0.1", "1", "10", "100"]
     legend1 = plt.legend([lines[2*i] for i in range(n_p)], label1,
-        title="Pressure (atm)", title_fontsize=12,
-        fontsize=12, loc="upper left")
+        title="Pressure (atm)", title_fontsize=9,
+        fontsize=9, loc="upper center", ncol=len(label1),
+        bbox_to_anchor=(0.5, 1.13), frameon=False)
     ax.add_artist(legend1)
 
     # Legend (style)
-    label2 = ["Computed", "Hansen and Heims (1958)"]
+    label2 = ["Computed", "Hansen and Heims (1958a)"]
     legend2 = plt.legend([lines[i] for i in range(2)], label2,
-        title="Source", title_fontsize=10, 
-        loc="lower right", fontsize=10)
+        title="Source", title_fontsize=9, 
+        loc="upper left", fontsize=9)
     ax.add_artist(legend2)
 
 
@@ -82,8 +82,8 @@ if __name__ == "__main__":
     ax.set_yticks(np.linspace(ylim[0], ylim[1], 6))
     ax.set_yticks(np.linspace(ylim[0], ylim[1], 26), minor=True)
 
-    plt.ylabel(r"Internal Energy $\left(\frac{ZE}{RT}\right)$", fontsize=14)
-    plt.xlabel(r"Temperature ($T$)", fontsize=14)
+    plt.ylabel(r"Internal Energy $\left(\frac{ZE}{RT}\right)$", fontsize=12)
+    plt.xlabel(r"Temperature ($T$)", fontsize=12)
 
     plt.ylim(ylim)
     plt.xlim([0, 15000])

@@ -20,6 +20,10 @@ if __name__ == "__main__":
     data_RG8 = np.load(file, mmap_mode="r")
     n_p, n_T, n_U = data_RG8.shape
 
+    # load ref. data (Hansen-1958a)
+    file_csv = "csv/speed-of-sound-b.csv"
+    data_csv = np.loadtxt(file_csv, skiprows=1, delimiter=",")
+
     c_table = []
 
     T_skip = 24
@@ -63,13 +67,25 @@ if __name__ == "__main__":
         c_array = c_table[p_idx]
         ax.plot(T_array, c_array, "-", color=colors[p_idx])
 
+        T_csv = data_csv[:, 0]
+        y_csv = data_csv[:, p_idx + 1]
+        ax.plot(T_csv, y_csv, "d", color=colors[p_idx])
+
     lines = ax.get_lines()
     # Legend (color)
     label1 = ["0.0001", "0.001", "0.01", "0.1", "1", "10", "100"]
-    legend1 = plt.legend([lines[i] for i in range(n_p)], label1,
-        title="Pressure (atm)", title_fontsize=12,
-        fontsize=10, loc="lower center", ncol=len(label1))
+    legend1 = plt.legend([lines[2*i] for i in range(n_p)], label1,
+        title="Pressure (atm)", title_fontsize=9,
+        fontsize=9, loc="upper center", ncol=len(label1),
+        bbox_to_anchor=(0.5, 1.13), frameon=False)
     ax.add_artist(legend1)
+
+    # Legend (style)
+    label2 = ["Computed", "Hansen and Heims (1958b)"]
+    legend2 = plt.legend([lines[i] for i in range(2)], label2,
+        title="Source", title_fontsize=9, 
+        loc="upper left", fontsize=9)
+    ax.add_artist(legend2)
 
     xlim = [0, 16000]
     ylim = [0.9, 1.7]
@@ -79,8 +95,8 @@ if __name__ == "__main__":
     ax.set_yticks(np.linspace(ylim[0], ylim[1], 9))
     ax.set_yticks(np.linspace(ylim[0], ylim[1], 17), minor=True)
 
-    plt.ylabel(r"Speed of Sound ($\frac{a^2 \rho}{p}$)", fontsize=14)
-    plt.xlabel(r"Temperature ($T$)", fontsize=14)
+    plt.ylabel(r"Speed of Sound ($\frac{a^2 \rho}{p}$)", fontsize=12)
+    plt.xlabel(r"Temperature ($T$)", fontsize=12)
 
     plt.ylim(ylim)
     plt.xlim([0, 15000])

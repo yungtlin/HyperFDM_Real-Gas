@@ -22,10 +22,12 @@ if __name__ == "__main__":
 
     c_table = []
 
+    T_skip = 24
+
     for p_idx in range(n_p):
         c_list = []
 
-        for T_idx in range(1, n_T):
+        for T_idx in range(T_skip, n_T):
             data_info = data_RG8[p_idx, T_idx]
 
             p = data_info[0]
@@ -37,6 +39,8 @@ if __name__ == "__main__":
 
             a = model.compute_a()
             c = a**2*rho/p
+
+            print("p: %.3e, T: %.3e, c:%.3e"%(p, T, c))
 
             c_list += [c]
         c_table += [c_list]
@@ -54,11 +58,33 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(figsize=(8, 5)) 
     colors = plt.cm.jet(np.linspace(0, 1, n_p))
 
-
-    T_array = data_RG8[0, :, 1][1:]
+    T_array = data_RG8[0, :, 1][T_skip:]
     for p_idx in range(n_p):
         c_array = c_table[p_idx]
         ax.plot(T_array, c_array, "-", color=colors[p_idx])
+
+    lines = ax.get_lines()
+    # Legend (color)
+    label1 = ["0.0001", "0.001", "0.01", "0.1", "1", "10", "100"]
+    legend1 = plt.legend([lines[i] for i in range(n_p)], label1,
+        title="Pressure (atm)", title_fontsize=12,
+        fontsize=10, loc="lower center", ncol=len(label1))
+    ax.add_artist(legend1)
+
+    xlim = [0, 16000]
+    ylim = [0.9, 1.7]
+
+    ax.set_xticks(np.linspace(xlim[0], xlim[1], 9))
+    ax.set_xticks(np.linspace(xlim[0], xlim[1], 33), minor=True)
+    ax.set_yticks(np.linspace(ylim[0], ylim[1], 9))
+    ax.set_yticks(np.linspace(ylim[0], ylim[1], 17), minor=True)
+
+    plt.ylabel(r"Speed of Sound ($\frac{a^2 \rho}{p}$)", fontsize=14)
+    plt.xlabel(r"Temperature ($T$)", fontsize=14)
+
+    plt.ylim(ylim)
+    plt.xlim([0, 15000])
+    plt.grid(which="both")
 
     plt.show()
 

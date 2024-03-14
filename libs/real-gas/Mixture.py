@@ -422,22 +422,27 @@ def res_RG8_prime(p, p_mix, K_p_all, ratio_NO):
 
     return res_prime
 
-def get_RG8_a_jacobian(mixture, dT=1e-3):
+def get_RG8_a_jacobian(mixture, dx=1e-8):
+
+    p_all_0 = mixture.p_all
+
     T0 = mixture.T
+    dT = T0*dx
     T1 = T0 + dT
+    T2 = T0 - dT
+
 
     # FDM approach
     K_p_all_1 = mixture.compute_K_p(T1)
-    mixture.compute_all()
-    s_mix_1 = mixture.s_mix
-
+    K_p_all_2 = mixture.compute_K_p(T2)
     K_p_all_0 = mixture.compute_K_p(T0)
+
     mixture.compute_all()
     s_mix_0 = mixture.s_mix
     p_all = mixture.p_all
 
-    dK_pdT = (K_p_all_1 - K_p_all_0)/dT
-    dsdT = (s_mix_1 - s_mix_0)/dT
+    dK_pdT = (K_p_all_1 - K_p_all_2)/(2*dT)
+    #dsdT = (s_mix_1 - s_mix_2)/(2*dT)
 
 
     eta_all = mixture.eta_all
@@ -447,36 +452,37 @@ def get_RG8_a_jacobian(mixture, dT=1e-3):
 
     rhoRT = rho*R*T0
 
-    Jacobian = np.zeros((10, 10))
+    n_Y = n_s + 2
+    Jacobian = np.zeros((n_Y, n_Y))
 
     # reaction equlibrium
     Jacobian[0, 0] = -eta_all[3]**2/eta_all[0]**2
     Jacobian[0, 3] = 2*eta_all[3]/eta_all[0]
     Jacobian[0, -2] = K_p_all_0[0]/(rho*rhoRT)
-    Jacobian[0, -1] = (1 - T0*dK_pdT[0])/(rhoRT*T0)
+    Jacobian[0, -1] = (K_p_all_0[0] - T0*dK_pdT[0])/(rhoRT*T0)
 
     Jacobian[1, 1] = -eta_all[4]**2/eta_all[1]**2
     Jacobian[1, 4] = 2*eta_all[4]/eta_all[1]
     Jacobian[1, -2] = K_p_all_0[1]/(rho*rhoRT)
-    Jacobian[1, -1] = (1 - T0*dK_pdT[1])/(rhoRT*T0)
+    Jacobian[1, -1] = (K_p_all_0[1] - T0*dK_pdT[1])/(rhoRT*T0)
 
     Jacobian[2, 2] = -eta_all[3]*eta_all[4]/eta_all[2]**2
     Jacobian[2, 3] = eta_all[4]/eta_all[2]
     Jacobian[2, 4] = eta_all[3]/eta_all[2]
     Jacobian[2, -2] = K_p_all_0[2]/(rho*rhoRT)
-    Jacobian[2, -1] = (1 - T0*dK_pdT[2])/(rhoRT*T0)
+    Jacobian[2, -1] = (K_p_all_0[2] - T0*dK_pdT[2])/(rhoRT*T0)
 
     Jacobian[3, 3] = -eta_all[5]*eta_all[7]/eta_all[3]**2
     Jacobian[3, 5] = eta_all[7]/eta_all[3]
     Jacobian[3, 7] = eta_all[5]/eta_all[3]
     Jacobian[3, -2] = K_p_all_0[3]/(rho*rhoRT)
-    Jacobian[3, -1] = (1 - T0*dK_pdT[3])/(rhoRT*T0)
+    Jacobian[3, -1] = (K_p_all_0[3] - T0*dK_pdT[3])/(rhoRT*T0)
 
     Jacobian[4, 4] = -eta_all[6]*eta_all[7]/eta_all[4]**2
     Jacobian[4, 6] = eta_all[7]/eta_all[4]
     Jacobian[4, 7] = eta_all[6]/eta_all[4]
     Jacobian[4, -2] = K_p_all_0[4]/(rho*rhoRT)
-    Jacobian[4, -1] = (1 - T0*dK_pdT[4])/(rhoRT*T0)
+    Jacobian[4, -1] = (K_p_all_0[4] - T0*dK_pdT[4])/(rhoRT*T0)
 
     # conservations
     A = 2*eta_all[0] + eta_all[2] + eta_all[3] + eta_all[5]
@@ -493,20 +499,72 @@ def get_RG8_a_jacobian(mixture, dT=1e-3):
     Jacobian[6, 6] = 1
     Jacobian[6, 7] = -1
 
+    U0 = np.zeros(n_Y)
+    U0[:8] = eta_all
+    U0[-2] = rho
+    U0[-1] = T0
+
+    Jacobian[9] = get_ds_mix_dU(eta_all, rho, T0, mixture, dx)
+
     for idx in range(n_s):
         species = mixture.species_list[idx]
 
         Jacobian[7, idx] = species.M_hat
         Jacobian[8, idx] = rhoRT
-        Jacobian[9, idx] = species.M_hat*species.s_total
+        Jacobian[9, idx] = species.M_hat*species.s_total - R
 
     Jacobian[8, -2] = np.sum(eta_all)*R*T0
     Jacobian[8, -1] = np.sum(eta_all)*rho*R
 
     Jacobian[9, -2] = np.sum(-eta_all**2*R**2*T0/p_all)
-    Jacobian[9, -1] = dsdT
-
+    #Jacobian[9, -1] = dsdT
+    mixture.set_T(T0)
     return Jacobian
+
+def get_ds_mix_dU(eta_all, rho, T, mixture, dx, n_Y=10):
+    U0 = np.zeros(n_Y)
+    U0[:8] = eta_all
+    U0[-2] = rho
+    U0[-1] = T
+
+    dsdU = np.zeros(n_Y)
+    for u_idx in range(n_Y):
+        U1 = np.array(U0)
+        U2 = np.array(U0)
+        dy = U0[u_idx]*dx
+
+        U1[u_idx] += dy
+        s_1 = get_s_mix(U1, mixture)
+        
+        U2[u_idx] -= dy
+        s_2 = get_s_mix(U2, mixture)
+
+        dsdU[u_idx] = (s_1 - s_2)/(2*dy)
+
+    return dsdU 
+
+def get_s_mix(U, mixture):
+    eta_all = U[:8]
+    rho = U[-2]
+    T = U[-1]
+
+    n_s = mixture.n_species
+    R_hat = mixture.R_hat
+
+    s_mix = 0 
+
+    mixture.set_T(T)
+    for s_idx in range(n_s):
+        species = mixture.species_list[s_idx]
+        p_s = eta_all[s_idx]*rho*R_hat*T
+        species.compute_entropy(p_s)
+        s_total = species.s_total
+
+        cs = eta_all[s_idx]*species.M_hat*s_total
+
+        s_mix += cs
+
+    return s_mix
 
 if __name__ == "__main__":
     pass

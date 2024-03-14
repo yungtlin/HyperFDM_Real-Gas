@@ -40,4 +40,26 @@ if __name__ == "__main__":
 
             c_list += [c]
         c_table += [c_list]
-    print(c_table)
+
+
+    c_table = np.array(c_table)
+
+
+    # plot setting
+    rc = {"font.family" : "serif", 
+          "mathtext.fontset" : "stix"}
+    plt.rcParams.update(rc)
+    plt.rcParams["font.serif"] = ["Times New Roman"] + plt.rcParams["font.serif"] 
+
+    fig, ax = plt.subplots(figsize=(8, 5)) 
+    colors = plt.cm.jet(np.linspace(0, 1, n_p))
+
+
+    T_array = data_RG8[0, :, 1][1:]
+    for p_idx in range(n_p):
+        c_array = c_table[p_idx]
+        ax.plot(T_array, c_array, "-", color=colors[p_idx])
+
+    plt.show()
+
+

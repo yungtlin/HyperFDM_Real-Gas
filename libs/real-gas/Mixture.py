@@ -205,7 +205,7 @@ class Mixture:
 
         x = np.matmul(J_inv, dU)
 
-        drho = x[-2]
+        drho = x[-2, 0]
 
         # imaginary values
         a = np.sqrt(dp/drho)

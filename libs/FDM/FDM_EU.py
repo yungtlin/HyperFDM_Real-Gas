@@ -1189,7 +1189,6 @@ if __name__ == "__main__":
     # 9pt, alpha = 36/72
     stencil = 3
     alpha = -1
-    N = 41
 
     solver.load("data/test_r1_ny21_nx21.dat")
     solver.set_FDM_stencil(stencil, alpha)
@@ -1223,17 +1222,18 @@ if __name__ == "__main__":
 
     #XX = V[0]
 
-    plt.figure(figsize=(4, 9))
-    plt.title(r"Uniform Mesh ($N_y$: %i)"%(N), fontsize=14)
+    plt.figure(figsize=(5.8, 7))
+    plt.title(r"Euler - Ideal Gas ($M_\infty$: %.1f)"%(M_inf), fontsize=14)
     #solver.plot_solution(XX, level=np.linspace(4.25, 7.5, 14))
     solver.plot_solution(XX, level=11)
 
     solver.mesh.plot_mesh()
-    plt.colorbar(format="%.1e")
+    cbar = plt.colorbar(format="%.0f")
+    cbar.set_label("Temperature (K)")
     plt.ylabel(r"$y/R$", fontsize=14)
     plt.xlabel(r"$x/R$", fontsize=14)
-    plt.xlim([-1.8, 0])
-    plt.ylim([-3, 3])
+    plt.xlim([-2, 0])
+    plt.ylim([0, 3])
     #plt.xlim([-1.15, -0.9])
     #plt.ylim([0, 0.6])
     plt.grid()

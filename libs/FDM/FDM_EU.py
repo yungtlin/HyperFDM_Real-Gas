@@ -171,7 +171,7 @@ class Solver2D:
 
         # convergence criterions
         T_u = self.r_c/self.U_inf
-        if tol < tol_min and self.T > 2.5*T_u:
+        if tol < tol_min: # and self.T > 2.5*T_u:
             is_converged = True 
         else:
             is_converged = False
@@ -1210,7 +1210,7 @@ if __name__ == "__main__":
     solver.set_is_shock_move(False)
     solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
 
-    solver.save("data/", "test")
+    #solver.save("data/", "test")
     
     #
     U = solver.U

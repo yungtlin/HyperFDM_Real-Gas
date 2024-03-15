@@ -57,6 +57,7 @@ class Solver2D:
         # Given conditions (Zhong 1998)
         self.M_inf = M_inf
         self.T_inf = 300
+        self.p_inf = 1e-3*101325
         self.T_w = 210.02
         self.Re = 2050
         self.r_c = 0.0061468
@@ -70,8 +71,8 @@ class Solver2D:
 
         # Re = u D / nu
         nu = self.U_inf*self.r_c/self.Re
-        self.rho_inf = mu/nu
-        self.p_inf = self.rho_inf*R_air*self.T_inf
+
+        self.rho_inf = self.p_inf/(R_air*self.T_inf)
 
     def set_init_freestream(self):
         gamma = self.gamma_ideal
@@ -1190,7 +1191,7 @@ if __name__ == "__main__":
     stencil = 3
     alpha = -1
 
-    solver.load("data/test_r1_ny21_nx21.dat")
+    #solver.load("data/test_r1_ny21_nx21.dat")
     solver.set_FDM_stencil(stencil, alpha)
     solver.set_boundary(out="dudt")
 
@@ -1209,7 +1210,7 @@ if __name__ == "__main__":
     solver.set_is_shock_move(False)
     solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
 
-    #solver.save("data/", "test")
+    solver.save("data/", "test")
     
     #
     U = solver.U

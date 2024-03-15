@@ -15,12 +15,12 @@ def gen_rho_e_data(path="RG8-rho-e-table.dat"):
     p_array = p_atm_array*101325
     n_p = p_atm_array.shape[0]
 
-    nT = 295
-    T_array = np.linspace(300, 15000, nT)
+    T_array = np.append([298], np.linspace(300, 15000, 295))
+    n_T = T_array.shape[0]
 
     # rho, e, p, T, eta_all
     nU = 4 + 8
-    Z_table = np.zeros((nU, n_p, nT))
+    Z_table = np.zeros((nU, n_p, n_T))
 
     for p_idx, p in enumerate(p_array):
         for T_idx, T in enumerate(T_array):
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     # load simulation results
     file = "RG8-rho-e-table.dat"
     data_RG8 = np.load(file, mmap_mode="r")
-    n_p, n_T, n_U = data_RG8.shape
+    n_U, n_p, n_T = data_RG8.shape
 
     rho = data_RG8[0]
     e = data_RG8[1]

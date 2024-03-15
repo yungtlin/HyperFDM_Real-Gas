@@ -306,7 +306,7 @@ def solve_rhoT1(mixture, K_p):
     return eta_all
 
 def solve_pT_RG8_newton(p_0_all, p_mix, K_p_all, ratio_NO,
-        omega_min=1, max_iter=1000, tol=1e-7):
+        omega_min=0.2, max_iter=5000, tol=1e-7):
     
     p_all = np.array(p_0_all)
 

@@ -8,9 +8,10 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 
 # self-defined libraries
+sys.path.append("../real-gas/") #include RG8-model
 from FDM import Zhong, FDM_interp
 from Mesh_FDM_Full import Mesh
-
+from gas_models import get_model_RG8
 
 ##########
 # Solver #
@@ -20,9 +21,10 @@ class Solver2D:
     ##################
     # Initialization #
     ##################
-    def __init__(self, M_inf, N):
+    def __init__(self, M_inf, N, gas_model="ideal"):
         # Gas related
         self.init_gas()
+        self.set_gas_model(gas_model)
 
         # Given conditions
         self.set_freestream(M_inf)
@@ -39,10 +41,10 @@ class Solver2D:
         self.stencil = 5
         self.alpha = 0.25
 
-
         # Solution Space
         self.nU = 4
         self.U = np.zeros((self.nU, *N))
+        self.eta_all = np.zeros((self.n_species, *N))
         self.set_init_freestream()
 
         # Parameter intialization
@@ -50,51 +52,70 @@ class Solver2D:
         self.T = 0
         self.set_flux_split("Zhong")
 
-    def init_gas(self):
-        # Gas properties
-        self.gamma = 1.4
-        self.Pr = 0.77
-        self.R_air = 287.05
 
     def set_freestream(self, M_inf):
         # Given conditions (Zhong 1998)
         self.M_inf = M_inf
-        self.T_inf = 39.6698
+        self.T_inf = 300
         self.T_w = 210.02
         self.Re = 2050
         self.r_c = 0.0061468
 
+        gamma = self.gamma_ideal
+        R_air = self.R_air_ideal
+
         mu = viscosity_Suther(self.T_inf)
 
-        self.U_inf = M_inf*np.sqrt(self.gamma*self.R_air*self.T_inf)
+        self.U_inf = M_inf*np.sqrt(gamma*R_air*self.T_inf)
 
         # Re = u D / nu
         nu = self.U_inf*self.r_c/self.Re
         self.rho_inf = mu/nu
-        self.p_inf = self.rho_inf*self.R_air*self.T_inf
-
-
-    def set_init_stagnation(self):
-        ratio_isen = 1 + (self.gamma - 1)/2*self.M_inf**2
-        p_t = self.p_inf*ratio_isen**(self.gamma/(self.gamma - 1))
-
-        rho = p_t/(self.R_air*self.T_w)
-
-        e = p_t/(self.gamma - 1)
-
-        self.U[0] = rho
-        self.U[1] = rho*0
-        self.U[2] = 0
-        self.U[3] = e
+        self.p_inf = self.rho_inf*R_air*self.T_inf
 
     def set_init_freestream(self):
-        c_inf = np.sqrt(self.gamma*self.R_air*self.T_inf)
+        gamma = self.gamma_ideal
+        R_air = self.R_air_ideal
+
+        c_inf = np.sqrt(gamma*R_air*self.T_inf)
         u_inf = self.M_inf*c_inf
 
         self.U[0] = self.rho_inf
         self.U[1] = self.rho_inf*u_inf
         self.U[2] = 0
-        self.U[3] = self.p_inf/(self.gamma - 1) + 0.5*self.rho_inf*u_inf**2
+        self.U[3] = self.p_inf/(gamma - 1) + 0.5*self.rho_inf*u_inf**2
+
+        for s_idx in range(self.n_species):
+            p_s = self.model_RG8.x0_all[s_idx]*self.p_inf
+            self.eta_all[s_idx] = p_s/(self.rho_inf*self.R_hat*self.T_inf)
+
+    #######
+    # Gas #
+    #######
+    def init_gas(self):
+        # Gas properties
+        self.model_RG8 = get_model_RG8()
+        self.model_RG8.init_composition([0.79, 0.21, 0, 0, 0, 0, 0, 0])
+        self.n_species = self.model_RG8.n_species
+
+        self.R_hat = self.model_RG8.R_hat
+        self.set_ideal_gas()
+
+    def set_gas_model(self, gas_model):
+        if gas_model == "ideal":
+            pass
+        elif gas_model == "RG8":
+            pass 
+        else:
+            raise ValueError("Gas model: %s NOT FOUND"%gas_model)
+
+
+    def set_ideal_gas(self):
+        # Gas properties
+        self.gamma_ideal = 1.4
+        self.Pr_ideal = 0.77
+        self.R_air_ideal = 287.05
+
 
     #######
     # Run #
@@ -234,7 +255,7 @@ class Solver2D:
         v = V[2]
         T = V[3]
 
-        c = np.sqrt(self.gamma*self.R_air*T)
+        c = np.sqrt(self.gamma_ideal*self.R_air_ideal*T)
         u_abs = np.sqrt(u**2 + v**2)
         u_ref = np.max(c + u_abs)
 
@@ -342,46 +363,13 @@ class Solver2D:
         elif method == "Zhong":
             self.flux_split = self.flux_split_Zhong
 
-    def flux_split_ABS(self, U, V, E_hat, F_hat):
-        geta_t = self.mesh.geta_t
-        
-        rho = U[0]
-        p = V[0]
-        u = V[1]
-        v = V[2]
-
-        a = np.zeros(rho.shape)
-        b = np.zeros(rho.shape)
-
-        c = np.sqrt(self.gamma*p/rho)
-        a = np.abs(u) + c
-        b = np.abs(v) + c
-
-        e1 = self.mesh.y_eta*a
-        e2 = -self.mesh.x_eta*b
-        lamb_E = np.abs(e1) + np.abs(e2) 
-
-        f1 = -self.mesh.y_xi*a
-        f2 = self.mesh.x_xi*b
-        lamb_F = np.abs(f1) + np.abs(f2) + np.abs(geta_t)
-
-        # E_hat #
-        E_hat_p = 0.5*(E_hat + lamb_E*U)
-        E_hat_m = 0.5*(E_hat - lamb_E*U)
-
-        # F_hat #
-        F_hat_p = 0.5*(F_hat + lamb_F*U)
-        F_hat_m = 0.5*(F_hat - lamb_F*U)
-
-        return E_hat_p, E_hat_m, F_hat_p, F_hat_m
-
     def flux_split_Zhong(self, U, V, E_hat, F_hat, epsilon=0.5):
         rho = U[0]
         p = V[0]
         u = V[1]
         v = V[2]
 
-        c = np.sqrt(self.gamma*p/rho)
+        c = np.sqrt(self.gamma_ideal*p/rho)
 
         a = np.sqrt(self.mesh.y_eta**2 + self.mesh.x_eta**2) # g|\nabla \eta|
         ac = a*c
@@ -462,10 +450,10 @@ class Solver2D:
         u = V_s[1]
         v = V_s[2]
 
-        c = np.sqrt(self.gamma*p/rho)
+        c = np.sqrt(self.gamma_ideal*p/rho)
         u_p = u*n[0] + v*n[1]
         alpha = (u**2 + v**2)/2
-        beta = self.gamma - 1
+        beta = self.gamma_ideal - 1
 
         lamb_N = (u_p + v_n) - c
 
@@ -494,7 +482,7 @@ class Solver2D:
         v_sq = v**2
         uv = u*v
 
-        gamma = self.gamma
+        gamma = self.gamma_ideal
 
         # Jacobian matrix A (dE/dU)
         A[0, 1] = 1
@@ -625,8 +613,10 @@ class Solver2D:
     def boundary_U_top_SF(self, U, V, mesh):
         n = mesh.surface_n
 
+        gamma = self.gamma_ideal
+
         v_n = mesh.surface_v_n
-        a_inf = np.sqrt(self.gamma*self.p_inf/self.rho_inf)
+        a_inf = np.sqrt(gamma*self.p_inf/self.rho_inf)
 
         u_n0 = self.U_inf*n[0]
         M_n0 = (u_n0 + v_n)/a_inf
@@ -635,8 +625,8 @@ class Solver2D:
         rho_0 = self.rho_inf
         T_0 = self.T_inf
 
-        p_s = p_0*(1 + 2*self.gamma/(self.gamma + 1)*(M_n0**2 - 1))
-        rho_s = rho_0*((self.gamma + 1)*M_n0**2)/((self.gamma - 1)*M_n0**2 + 2)
+        p_s = p_0*(1 + 2*gamma/(gamma + 1)*(M_n0**2 - 1))
+        rho_s = rho_0*((gamma + 1)*M_n0**2)/((gamma - 1)*M_n0**2 + 2)
         T_s = p_s*rho_0/(p_0*rho_s)*T_0
         u_ns = rho_0/rho_s*(u_n0 + v_n) - v_n
 
@@ -685,7 +675,7 @@ class Solver2D:
         # => dp/deta = p*c
         H = self.H
         r_c = self.r_c
-        c = u_t**2*H/(self.R_air*T_bot*r_c)
+        c = u_t**2*H/(self.R_air_ideal*T_bot*r_c)
 
         # a0*p0 + an*pn = p0*c
         # => p0 = (an*pn)/(c-a0)
@@ -966,6 +956,9 @@ class Solver2D:
     #########
     # primitive states [p, u, v, T]
     def state_UtoV(self, U):
+        gamma = self.gamma_ideal
+        R_air = self.R_air_ideal
+
         V = np.zeros(U.shape)
 
         rho = U[0]
@@ -973,8 +966,8 @@ class Solver2D:
         v = U[2]/rho 
         E = U[3]/rho 
         cvRT = E - 1/2*(u**2 + v**2)
-        T = (self.gamma-1)/self.R_air*cvRT
-        p = rho*self.R_air*T
+        T = (gamma-1)/R_air*cvRT
+        p = rho*R_air*T
 
         V[0] = p 
         V[1] = u 
@@ -987,6 +980,9 @@ class Solver2D:
 
     # primitive states [p, u, v, T]
     def state_VtoU(self, V):
+        gamma = self.gamma_ideal
+        R_air = self.R_air_ideal
+
         U = np.zeros(V.shape)
 
         p = V[0]
@@ -994,8 +990,8 @@ class Solver2D:
         v = V[2]
         T = V[3]
 
-        rho = p/(self.R_air*T)
-        e = p/(self.gamma - 1) + 0.5*rho*(u**2 + v**2)
+        rho = p/(R_air*T)
+        e = p/(gamma - 1) + 0.5*rho*(u**2 + v**2)
 
         U[0] = rho
         U[1] = rho*u 
@@ -1071,7 +1067,7 @@ class Solver2D:
         nX = [self.nU, self.N[0], self.N[1]]
         r = [self.r_c]
         writeline(file, np.int64, write_version)
-        writeline(file, np.float64, self.gamma)
+        writeline(file, np.int64, self.n_species)
         writeline(file, np.int64, nX)
         writeline(file, np.float64, r)
 
@@ -1086,11 +1082,15 @@ class Solver2D:
             for i in range(self.N[0]):
                 writeline(file, np.float64, self.U[j, i])
 
+        for j in range(self.n_species):
+            for i in range(self.N[0]):
+                writeline(file, np.float64, self.eta_all[j, i])
+
     def load(self, path):
         print("Loading data: %s"%path)
         file = open(path, "rb")
         version = readline(file, np.int64, 1)[0]
-        self.gamma = readline(file, np.float64, 1)[0]
+        n_species = readline(file, np.int64, 1)[0]
         self.nU, Ny, Nx = readline(file, np.int64, 3)
         r_c = readline(file, np.float64, 1)
         self.N = [Ny, Nx]
@@ -1107,6 +1107,12 @@ class Solver2D:
         for j in range(self.nU):
             for i in range(self.N[0]):
                 self.U[j][i] = readline(file, np.float64, self.N[1])
+
+        self.eta_all = np.zeros((n_species, self.N[0], self.N[1]))
+        for j in range(n_species):
+            for i in range(self.N[0]):
+                self.eta_all[j][i] = readline(file, np.float64, self.N[1])
+
         file.close()
 
     ########
@@ -1173,12 +1179,10 @@ def check_negative_pressure(p):
     if np.min(p) < 0:
         raise RuntimeError("Pressure Below 0!!")
 
-
 if __name__ == "__main__":
-    N = [41, 41]
-    M_inf = 5.73
+    N = [21, 21]
+    M_inf = 10
     solver = Solver2D(M_inf, N)
-
 
     # 5pt, alpha = 0.25/0.5
     # 7pt, alpha = -6/-12
@@ -1187,6 +1191,7 @@ if __name__ == "__main__":
     alpha = -1
     N = 41
 
+    solver.load("data/test_r1_ny21_nx21.dat")
     solver.set_FDM_stencil(stencil, alpha)
     solver.set_boundary(out="dudt")
 
@@ -1201,11 +1206,11 @@ if __name__ == "__main__":
 
     # Shock moveboundary_dUdt_wall_inviscid
     max_iter = 10000
-    CFL = 0.2
+    CFL = 0.4
     solver.set_is_shock_move(False)
     solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
 
-    #solver.save("data/", "run2")
+    solver.save("data/", "test")
     
     #
     U = solver.U
@@ -1213,7 +1218,7 @@ if __name__ == "__main__":
     T = V[3]
     p = V[0]
 
-    XX = T/solver.T_inf
+    XX = T
     #XX = p/solver.p_inf
 
     #XX = V[0]
@@ -1233,4 +1238,3 @@ if __name__ == "__main__":
     #plt.ylim([0, 0.6])
     plt.grid()
     plt.show()
-    

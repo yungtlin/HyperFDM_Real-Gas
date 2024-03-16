@@ -156,7 +156,7 @@ class Mixture:
     ###########
     # Compute #
     ###########
-    def compute_pT(self, p_mix, T, p_s0=[]):
+    def compute_pT(self, p_mix, T, p_s0=[], is_print=True):
 
         self.set_T(T)
         if len(p_s0) == 0:
@@ -168,7 +168,8 @@ class Mixture:
         K_p_all = self.compute_K_p(T)
         ratio_NO = self.ratio_NO
 
-        self.p_all = solve_pT_RG8_newton(p_all, p_mix, K_p_all, ratio_NO)
+        self.p_all = solve_pT_RG8_newton(p_all, p_mix, K_p_all, ratio_NO,
+            is_print=is_print)
         self.compute_all()
 
     def compute_rhoT1(self, rho, T):
@@ -306,7 +307,7 @@ def solve_rhoT1(mixture, K_p):
     return eta_all
 
 def solve_pT_RG8_newton(p_0_all, p_mix, K_p_all, ratio_NO,
-        omega_min=0.2, max_iter=5000, tol=1e-7):
+        omega_min=0.2, max_iter=5000, tol=1e-7, is_print=True):
     
     p_all = np.array(p_0_all)
 
@@ -338,8 +339,8 @@ def solve_pT_RG8_newton(p_0_all, p_mix, K_p_all, ratio_NO,
 
         if error < tol:
             break
-
-    print("Newton iterations: %i, error: %.5e"%(iteration, error))
+    if is_print:
+        print("Newton iterations: %i, error: %.5e"%(iteration, error))
 
     return p_all
 

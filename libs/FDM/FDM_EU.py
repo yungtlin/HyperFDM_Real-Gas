@@ -44,7 +44,7 @@ class Solver2D:
         # Solution Space
         self.nU = 4
         self.U = np.zeros((self.nU, *N))
-        self.eta_all = np.zeros((self.n_species, *N))
+        self.Eta_all = np.zeros((self.n_species, *N))
         self.set_init_freestream()
 
         # Parameter intialization
@@ -62,8 +62,10 @@ class Solver2D:
         self.Re = 2050
         self.r_c = 0.0061468
 
+        self.model_RG8.compute_pT(self.p_inf, self.T_inf)
+
         gamma = self.gamma_ideal
-        R_air = self.R_air_ideal
+        R_air = self.model_RG8.R_mix
 
         mu = viscosity_Suther(self.T_inf)
 
@@ -72,7 +74,8 @@ class Solver2D:
         # Re = u D / nu
         nu = self.U_inf*self.r_c/self.Re
 
-        self.rho_inf = self.p_inf/(R_air*self.T_inf)
+        self.rho_inf = self.model_RG8.rho_mix
+        self.E_inf = self.rho_inf*self.model_RG8.e_mix + 0.5*self.rho_inf*self.U_inf**2
 
     def set_init_freestream(self):
         gamma = self.gamma_ideal
@@ -88,7 +91,7 @@ class Solver2D:
 
         for s_idx in range(self.n_species):
             p_s = self.model_RG8.x0_all[s_idx]*self.p_inf
-            self.eta_all[s_idx] = p_s/(self.rho_inf*self.R_hat*self.T_inf)
+            self.Eta_all[s_idx] = p_s/(self.rho_inf*self.R_hat*self.T_inf)
 
     #######
     # Gas #
@@ -604,12 +607,12 @@ class Solver2D:
     ## Top ##
     # Constant condition (eta = -1)
     def boundary_U_top_constant(self, U, V, mesh):
-        V[0, -1, :] = self.p_inf
-        V[1, -1, :] = self.U_inf
-        V[2, -1, :] = 0
-        V[3, -1, :] = self.T_inf
+        U[0, -1] = self.rho_inf
+        U[1, -1] = self.rho_inf*self.U_inf
+        U[2, -1] = 0
+        U[3, -1] = self.E_inf
 
-        U[:, -1] = self.state_VtoU(V[:, -1])
+        V[:, -1] = self.state_UtoV(U[:, -1])
 
     def boundary_U_top_SF(self, U, V, mesh):
         n = mesh.surface_n
@@ -1085,7 +1088,7 @@ class Solver2D:
 
         for j in range(self.n_species):
             for i in range(self.N[0]):
-                writeline(file, np.float64, self.eta_all[j, i])
+                writeline(file, np.float64, self.Eta_all[j, i])
 
     def load(self, path):
         print("Loading data: %s"%path)
@@ -1109,10 +1112,10 @@ class Solver2D:
             for i in range(self.N[0]):
                 self.U[j][i] = readline(file, np.float64, self.N[1])
 
-        self.eta_all = np.zeros((n_species, self.N[0], self.N[1]))
+        self.Eta_all = np.zeros((n_species, self.N[0], self.N[1]))
         for j in range(n_species):
             for i in range(self.N[0]):
-                self.eta_all[j][i] = readline(file, np.float64, self.N[1])
+                self.Eta_all[j][i] = readline(file, np.float64, self.N[1])
 
         file.close()
 
@@ -1239,3 +1242,4 @@ if __name__ == "__main__":
     #plt.ylim([0, 0.6])
     plt.grid()
     plt.show()
+    

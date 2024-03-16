@@ -48,7 +48,7 @@ def gen_rho_e_data(path="RG8-rho-e-table.dat"):
 
 
 if __name__ == "__main__":
-    #gen_rho_e_data()
+    gen_rho_e_data()
 
     # load simulation results
     file = "RG8-rho-e-table.dat"

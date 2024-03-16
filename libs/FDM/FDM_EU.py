@@ -12,6 +12,7 @@ sys.path.append("../real-gas/") #include RG8-model
 from FDM import Zhong, FDM_interp
 from Mesh_FDM_Full import Mesh
 from gas_models import get_model_RG8
+from Table_RG8 import Table_RG8_rhoe
 
 ##########
 # Solver #
@@ -24,6 +25,7 @@ class Solver2D:
     def __init__(self, M_inf, N, gas_model="ideal"):
         # Gas related
         self.init_gas()
+        self.set_RG8_table()
         self.set_gas_model(gas_model)
 
         # Given conditions
@@ -44,6 +46,7 @@ class Solver2D:
         # Solution Space
         self.nU = 4
         self.U = np.zeros((self.nU, *N))
+        self.V = np.zeros(self.U.shape)
         self.Eta_all = np.zeros((self.n_species, *N))
         self.set_init_freestream()
 
@@ -62,7 +65,7 @@ class Solver2D:
         self.Re = 2050
         self.r_c = 0.0061468
 
-        self.model_RG8.compute_pT(self.p_inf, self.T_inf)
+        self.model_RG8.compute_pT(self.p_inf, self.T_inf, is_print=False)
 
         gamma = self.gamma_ideal
         R_air = self.model_RG8.R_mix
@@ -105,14 +108,19 @@ class Solver2D:
         self.R_hat = self.model_RG8.R_hat
         self.set_ideal_gas()
 
+    def set_RG8_table(self):
+        path = "../real-gas/RG8-rho-e-table.dat"
+        self.interp_RG8 = Table_RG8_rhoe(path=path)
+    
     def set_gas_model(self, gas_model):
+        print("Using: %s gas model"%gas_model)
         if gas_model == "ideal":
-            pass
+            self.state_UtoV = self.state_UtoV_ideal
+            self.state_VtoU = self.state_VtoU_ideal
         elif gas_model == "RG8":
             pass 
         else:
             raise ValueError("Gas model: %s NOT FOUND"%gas_model)
-
 
     def set_ideal_gas(self):
         # Gas properties
@@ -120,6 +128,25 @@ class Solver2D:
         self.Pr_ideal = 0.77
         self.R_air_ideal = 287.05
 
+    def init_guess_RG8(self):
+        print("Initializing gas composition with the interpolation...")
+        rho_all = self.U[0]
+        e_all = self.state_Utoe(self.U)
+
+        u_interp = np.zeros(self.interp_RG8.n_z)
+        for j in range(self.N[0]):
+            for i in range(self.N[1]):
+                rho = rho_all[j, i]
+                e = e_all[j, i]
+
+                u_interp = self.interp_RG8.get_data(rho, e)
+
+                self.V[0, j, i] = u_interp[0] # p
+                self.V[3, j, i] = u_interp[1] # T
+                self.Eta_all[:, j, i] = u_interp[2:]
+    
+    def update_V(self):
+        self.V = self.state_UtoV(self.U, self.V, self.Eta_all)
 
     #######
     # Run #
@@ -959,7 +986,7 @@ class Solver2D:
     # State #
     #########
     # primitive states [p, u, v, T]
-    def state_UtoV(self, U):
+    def state_UtoV_ideal(self, U, V, Eta_all):
         gamma = self.gamma_ideal
         R_air = self.R_air_ideal
 
@@ -983,7 +1010,7 @@ class Solver2D:
         return V
 
     # primitive states [p, u, v, T]
-    def state_VtoU(self, V):
+    def state_VtoU_ideal(self, V, U, Eta_all):
         gamma = self.gamma_ideal
         R_air = self.R_air_ideal
 
@@ -1003,6 +1030,14 @@ class Solver2D:
         U[3] = e
 
         return U
+
+    def state_Utoe(self, U):
+        rho = U[0]
+        u = U[1]/rho
+        v = U[2]/rho
+        e = U[3]/rho - 0.5*(u**2 + v**2)
+
+        return e
 
     ##########
     # Remesh #
@@ -1194,7 +1229,10 @@ if __name__ == "__main__":
     stencil = 3
     alpha = -1
 
-    #solver.load("data/test_r1_ny21_nx21.dat")
+    solver.load("data/ideal_r1_ny21_nx21.dat")
+    
+    #solver.init_guess_RG8()
+
     solver.set_FDM_stencil(stencil, alpha)
     solver.set_boundary(out="dudt")
 
@@ -1208,16 +1246,16 @@ if __name__ == "__main__":
     #solver.run_steady(max_iter, CFL, tol_min=1e-2, temporal="RK3")
 
     # Shock moveboundary_dUdt_wall_inviscid
-    max_iter = 10000
-    CFL = 0.4
-    solver.set_is_shock_move(False)
-    solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
+    #max_iter = 10000
+    #CFL = 0.4
+    #solver.set_is_shock_move(False)
+    #solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
 
-    solver.save("data/", "test")
+    #solver.save("data/", "ideal")
     
     #
     U = solver.U
-    V = solver.state_UtoV(U)
+    V = solver.V
     T = V[3]
     p = V[0]
 
@@ -1242,4 +1280,3 @@ if __name__ == "__main__":
     #plt.ylim([0, 0.6])
     plt.grid()
     plt.show()
-    

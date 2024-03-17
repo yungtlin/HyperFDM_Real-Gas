@@ -162,15 +162,35 @@ class Mixture:
         if len(p_s0) == 0:
             p_all = p_mix*self.x0_all + 1e-20 # prevent zero division
         else: 
-            assert len(p_s0) == len(self.species_list)
+            assert len(p_s0) == self.n_species
             p_all = p_s0   
 
         K_p_all = self.compute_K_p(T)
         ratio_NO = self.ratio_NO
 
-        self.p_all = solve_pT_RG8_newton(p_all, p_mix, K_p_all, ratio_NO,
+        self.p_all = solve_pT_RG8_Newton(p_all, p_mix, K_p_all, ratio_NO,
             is_print=is_print)
         self.compute_all()
+
+    def compute_rhoe(self, rho, e, T0=0, eta0=[], is_print=True):
+        T = T0 if T0 != 0 else e/(3*self.R_mix) 
+
+        R_air_ideal = 288.27
+        if len(eta0) == 0:
+            eta_all = self.x0_all*R_air_ideal/self.R_hat + 1e-20
+        else:
+            assert len(eta0) == self.n_species
+            eta_all = eta0       
+
+        self.eta_all, self.T = solve_rhoe_RG8_Newton(eta_all, T, rho, e, self,
+            is_print=is_print)
+
+        self.rho_mix = rho
+        self.compute_all_eta(self.eta_all)
+
+        err = np.abs((self.e_mix - e)/e)
+        if err > 1e-5:
+            raise ValueError("rho e not converged!")
 
     def compute_rhoT1(self, rho, T):
         self.rho_mix = rho
@@ -309,8 +329,8 @@ def solve_rhoT1(mixture, K_p):
 
     return eta_all
 
-def solve_pT_RG8_newton(p_0_all, p_mix, K_p_all, ratio_NO,
-        omega_min=0.2, max_iter=5000, tol=1e-7, is_print=True):
+def solve_pT_RG8_Newton(p_0_all, p_mix, K_p_all, ratio_NO,
+    omega_min=0.2, max_iter=5000, tol=1e-7, is_print=True):
     
     p_all = np.array(p_0_all)
 
@@ -434,7 +454,6 @@ def get_RG8_a_jacobian(mixture, dx=1e-8):
     dT = T0*dx
     T1 = T0 + dT
     T2 = T0 - dT
-
 
     # FDM approach
     K_p_all_1 = mixture.compute_K_p(T1)
@@ -570,6 +589,50 @@ def get_s_mix(U, mixture):
 
     return s_mix
 
+
+def solve_rhoe_RG8_Newton(eta_0_all, T_0, rho, e, mixture,
+    omega_min=0.2, max_iter=1000, tol=1e-7, is_print=True):
+
+    eta_all = np.array(eta_0_all)
+    T = T_0
+
+    res = res_RG8_eta(eta_all, T, rho, e, mixture).reshape((-1, 1))
+    for iteration in range(max_iter):
+        
+        jac = res_rhoe_RG8_prime(eta_all, T, rho, e, mixture)
+        jac_inv = np.linalg.inv(jac)
+        dU = -np.matmul(jac_inv, res).reshape(-1)
+
+        # Adaptive URF updating
+        x = np.max(np.abs(dU))
+        omega = 1 - (1 - omega_min)*np.exp(-1/x)
+
+        # Linear updating
+        #omega = 1
+
+        dy = omega*dU
+        for idx, p in enumerate(eta_all):
+            y = eta_all[idx] + dy[idx]
+
+            if y  < 0:
+                eta_all[idx] = abs(eta_all[idx])/2
+            else:
+                eta_all[idx] = y
+
+        y = T + dy[-1]
+        T = y if y > 0 else abs(T)/2
+
+        res = res_RG8_eta(eta_all, T, rho, e, mixture)
+        error = np.max(np.abs(res))
+
+        if error < tol:
+            break
+    if is_print:
+        print("rho-e Newton iterations: %i, error: %.5e"%(iteration, error))
+
+    return eta_all, T
+
+
 def res_RG8_eta(eta, T, rho, e, mixture):
     res = np.zeros(9)
 
@@ -615,6 +678,87 @@ def res_RG8_eta(eta, T, rho, e, mixture):
     res /= c
 
     return res
+
+
+def res_rhoe_RG8_prime(eta_all, T, rho, e, mixture, dx=1e-8):
+    T0 = T
+    dT = T0*dx
+    T1 = T0 + dT
+    T2 = T0 - dT
+
+    # FDM approach
+    K_p_all_1 = mixture.compute_K_p(T1)
+    K_p_all_2 = mixture.compute_K_p(T2)
+    K_p_all_0 = mixture.compute_K_p(T0)
+
+    mixture.set_T(T0)
+
+    dK_pdT = (K_p_all_1 - K_p_all_2)/(2*dT)
+
+    R = mixture.R_hat
+    n_s = mixture.n_species
+
+    rhoRT = rho*R*T0
+
+    n_Y = n_s + 1
+    Jacobian = np.zeros((n_Y, n_Y))
+
+    # reaction equlibrium
+    Jacobian[0, 0] = -eta_all[3]**2/eta_all[0]**2
+    Jacobian[0, 3] = 2*eta_all[3]/eta_all[0]
+    Jacobian[0, -1] = (K_p_all_0[0] - T0*dK_pdT[0])/(rhoRT*T0)
+
+    Jacobian[1, 1] = -eta_all[4]**2/eta_all[1]**2
+    Jacobian[1, 4] = 2*eta_all[4]/eta_all[1]
+    Jacobian[1, -1] = (K_p_all_0[1] - T0*dK_pdT[1])/(rhoRT*T0)
+
+    Jacobian[2, 2] = -eta_all[3]*eta_all[4]/eta_all[2]**2
+    Jacobian[2, 3] = eta_all[4]/eta_all[2]
+    Jacobian[2, 4] = eta_all[3]/eta_all[2]
+    Jacobian[2, -1] = (K_p_all_0[2] - T0*dK_pdT[2])/(rhoRT*T0)
+
+    Jacobian[3, 3] = -eta_all[5]*eta_all[7]/eta_all[3]**2
+    Jacobian[3, 5] = eta_all[7]/eta_all[3]
+    Jacobian[3, 7] = eta_all[5]/eta_all[3]
+    Jacobian[3, -1] = (K_p_all_0[3] - T0*dK_pdT[3])/(rhoRT*T0)
+
+    Jacobian[4, 4] = -eta_all[6]*eta_all[7]/eta_all[4]**2
+    Jacobian[4, 6] = eta_all[7]/eta_all[4]
+    Jacobian[4, 7] = eta_all[6]/eta_all[4]
+    Jacobian[4, -1] = (K_p_all_0[4] - T0*dK_pdT[4])/(rhoRT*T0)
+
+    # conservations
+    A = 2*eta_all[0] + eta_all[2] + eta_all[3] + eta_all[5]
+    B = 2*eta_all[1] + eta_all[2] + eta_all[4] + eta_all[6]
+    Jacobian[5, 0] = 2/B
+    Jacobian[5, 1] = -2*A/B**2
+    Jacobian[5, 2] = 1/B - A/B**2
+    Jacobian[5, 3] = 1/B
+    Jacobian[5, 4] = -A/B**2
+    Jacobian[5, 5] = 1/B
+    Jacobian[5, 6] = -A/B**2
+
+    Jacobian[6, 5] = 1
+    Jacobian[6, 6] = 1
+    Jacobian[6, 7] = -1
+
+    for idx in range(n_s):
+        species = mixture.species_list[idx]
+        M_hat = species.M_hat
+        e_s = species.e_total
+        cv_s = species.cv_total
+        Jacobian[7, idx] = M_hat
+        Jacobian[8, idx] = M_hat*e_s
+        Jacobian[8, -1] += eta_all[idx]*M_hat*cv_s
+
+    c = np.zeros(9)
+    Jacobian[:5] /= K_p_all_0.reshape((-1, 1))/rhoRT
+    Jacobian[5] /= mixture.ratio_NO
+    Jacobian[6] /= 1
+    Jacobian[7] /= 1
+    Jacobian[8] /= e
+
+    return Jacobian
 
 
 if __name__ == "__main__":

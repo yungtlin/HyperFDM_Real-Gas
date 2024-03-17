@@ -174,7 +174,7 @@ class Mixture:
 
     def compute_rhoe(self, rho, e, T0=0, eta0=[], is_print=True):
         T = T0 if T0 != 0 else e/(3*self.R_mix) 
-
+        
         R_air_ideal = 288.27
         if len(eta0) == 0:
             eta_all = self.x0_all*R_air_ideal/self.R_hat + 1e-20
@@ -662,6 +662,7 @@ def res_RG8_eta(eta, T, rho, e, mixture):
         M_hat = species.M_hat
         c = eta[s_idx]*M_hat
         e_s = species.e_total
+
         res[7] += c
         res[8] += c*e_s
 
@@ -751,7 +752,6 @@ def res_rhoe_RG8_prime(eta_all, T, rho, e, mixture, dx=1e-8):
         Jacobian[8, idx] = M_hat*e_s
         Jacobian[8, -1] += eta_all[idx]*M_hat*cv_s
 
-    c = np.zeros(9)
     Jacobian[:5] /= K_p_all_0.reshape((-1, 1))/rhoRT
     Jacobian[5] /= mixture.ratio_NO
     Jacobian[6] /= 1

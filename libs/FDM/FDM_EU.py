@@ -96,6 +96,8 @@ class Solver2D:
             p_s = self.model_RG8.x0_all[s_idx]*self.p_inf
             self.Eta_all[s_idx] = p_s/(self.rho_inf*self.R_hat*self.T_inf)
 
+        self.update_V()
+
     #######
     # Gas #
     #######
@@ -118,7 +120,8 @@ class Solver2D:
             self.state_UtoV = self.state_UtoV_ideal
             self.state_VtoU = self.state_VtoU_ideal
         elif gas_model == "RG8":
-            pass 
+            self.state_UtoV = self.state_UtoV_RG8
+            self.state_VtoU = self.state_VotU_RG8
         else:
             raise ValueError("Gas model: %s NOT FOUND"%gas_model)
 
@@ -1040,6 +1043,38 @@ class Solver2D:
 
         return e
 
+    def state_UtoV_RG8(self, U, V, Eta_all):
+        u_shape = U.shape
+        n_U = u_shape[0]
+        N = u_shape[1:]
+        n_s = Eta_all.shape[0]
+
+        U_1d = U.reshape((n_U, -1))
+        T_1d = V[3].reshape(-1)
+        p_1d = np.zeros(T_1d.shape)
+        Eta_1d = Eta_all.reshape((n_s, -1))
+
+        rho_1d = U_1d[0]
+        u_1d = U_1d[1]/rho_1d
+        v_1d = U_1d[2]/rho_1d
+        e_1d = U_1d[3]/rho_1d - 0.5*(u_1d**2 + v_1d**2)
+
+        n_X = U_1d.shape[1]
+        for idx in range(n_X):
+            rho = rho_1d[idx]
+            e = e_1d[idx]
+            T0 = T_1d[idx]
+            Eta0 = Eta_1d[:, idx]
+
+            self.model_RG8.compute_rhoe(rho, e, T0=T0, eta0=Eta0)
+
+
+
+        return V, Eta_all
+
+    def state_VotU_RG8(self, V, Eta_all):
+        pass
+
     ##########
     # Remesh #
     ##########
@@ -1153,6 +1188,7 @@ class Solver2D:
             for i in range(self.N[0]):
                 self.Eta_all[j][i] = readline(file, np.float64, self.N[1])
 
+        self.update_V()
         file.close()
 
     ########
@@ -1230,9 +1266,11 @@ if __name__ == "__main__":
     stencil = 3
     alpha = -1
 
-    #solver.load("data/ideal_r1_ny21_nx21.dat")
-    
-    #solver.init_guess_RG8()
+    solver.load("data/ideal_r1_ny21_nx21.dat")
+
+    solver.set_gas_model("RG8")    
+    solver.init_guess_RG8()
+
 
     solver.set_FDM_stencil(stencil, alpha)
     solver.set_boundary(out="dudt")
@@ -1241,14 +1279,14 @@ if __name__ == "__main__":
     #solver.remesh(N)
 
     # Shock moveboundary_dUdt_wall_inviscid
-    max_iter = 10000
-    CFL = 0.4
-    solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
+    #max_iter = 10000
+    #CFL = 0.4
+    #solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
 
     #solver.save("data/", "ideal")
     
     #
-    #solver.update_V()
+    solver.update_V()
     U = solver.U
     V = solver.V
     T = V[3]
@@ -1274,4 +1312,4 @@ if __name__ == "__main__":
     #plt.xlim([-1.15, -0.9])
     #plt.ylim([0, 0.6])
     plt.grid()
-    plt.show()
+    #plt.show()

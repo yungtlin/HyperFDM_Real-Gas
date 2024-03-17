@@ -220,11 +220,13 @@ class Mixture:
 
         xM_all = np.zeros(self.n_species)
         e_all = np.zeros(self.n_species)
+        cv_all = np.zeros(self.n_species)
         s_all = np.zeros(self.n_species)
 
         for idx, species in enumerate(self.species_list):
             xM_all[idx] = self.x_all[idx]*species.M_hat
             e_all[idx] = species.e_total
+            cv_all[idx] = species.cv_total
 
             species.compute_entropy(self.p_all[idx])
             s_all[idx] = species.s_total 
@@ -234,6 +236,7 @@ class Mixture:
         self.R_mix = species.R_hat/self.M_hat_mix
 
         self.e_mix = np.sum(self.c_all*e_all)
+        self.cv_mix = np.sum(self.c_all*cv_all)
         self.s_mix = np.sum(self.c_all*s_all)
 
         self.h_mix = self.e_mix + self.R_mix*self.T
@@ -449,7 +452,7 @@ def get_RG8_a_jacobian(mixture, dx=1e-8):
     eta_all = mixture.eta_all
     rho = mixture.rho_mix
     R = mixture.R_hat
-    n_s = len(mixture.species_list)
+    n_s = mixture.n_species
 
     rhoRT = rho*R*T0
 
@@ -566,6 +569,53 @@ def get_s_mix(U, mixture):
         s_mix += cs
 
     return s_mix
+
+def res_RG8_eta(eta, T, rho, e, mixture):
+    res = np.zeros(9)
+
+    mixture.set_T(T)
+    K_p_all = mixture.compute_K_p(T)
+    ratio_NO = mixture.ratio_NO
+    R_hat = mixture.R_hat
+    rhoRT = rho*R_hat*T
+    n_s = mixture.n_species
+
+    # idx| 0   1   2   3   4   5   6   7
+    # sp | N2, O2, NO, N,  O,  N+, O+, e-, 
+
+    res[0] =     eta[3]**2/eta[0] - K_p_all[0]/rhoRT
+    res[1] =     eta[4]**2/eta[1] - K_p_all[1]/rhoRT
+    res[2] = eta[3]*eta[4]/eta[2] - K_p_all[2]/rhoRT
+    res[3] = eta[5]*eta[7]/eta[3] - K_p_all[3]/rhoRT
+    res[4] = eta[6]*eta[7]/eta[4] - K_p_all[4]/rhoRT
+
+    res[5] = (2*eta[0] + eta[2] + eta[3] + eta[5])/\
+        (2*eta[1] + eta[2] + eta[4] + eta[6]) - ratio_NO
+
+    res[6] = eta[5] + eta[6] - eta[7]
+
+    for s_idx in range(n_s):
+        species = mixture.species_list[s_idx]
+        M_hat = species.M_hat
+        c = eta[s_idx]*M_hat
+        e_s = species.e_total
+        res[7] += c
+        res[8] += c*e_s
+
+    res[7] -= 1
+    res[8] -= e
+
+    c = np.zeros(9)
+    c[:5] = K_p_all/rhoRT
+    c[5] = ratio_NO
+    c[6] = 1
+    c[7] = 1
+    c[8] = e
+
+    res /= c
+
+    return res
+
 
 if __name__ == "__main__":
     pass

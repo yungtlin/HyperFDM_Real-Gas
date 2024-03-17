@@ -90,7 +90,7 @@ class Solver2D:
         self.U[0] = self.rho_inf
         self.U[1] = self.rho_inf*u_inf
         self.U[2] = 0
-        self.U[3] = self.p_inf/(gamma - 1) + 0.5*self.rho_inf*u_inf**2
+        self.U[3] = self.E_inf
 
         for s_idx in range(self.n_species):
             p_s = self.model_RG8.x0_all[s_idx]*self.p_inf
@@ -146,7 +146,7 @@ class Solver2D:
                 self.Eta_all[:, j, i] = u_interp[2:]
     
     def update_V(self):
-        self.V = self.state_UtoV(self.U, self.V, self.Eta_all)
+        self.V, self.Eta_all = self.state_UtoV(self.U, self.V, self.Eta_all)
 
     #######
     # Run #
@@ -157,6 +157,7 @@ class Solver2D:
 
         # Update
         self.update_FDM_stencil()
+        self.update_V()
 
         # start iteration
         iteration = 0
@@ -183,7 +184,7 @@ class Solver2D:
         # Update boundary condition for the result
         self.mesh.update_H(self.H, self.Ht)
 
-        self.boundary_update_U(self.U, self.state_UtoV(self.U), self.mesh)
+        self.boundary_update_U(self.U, self.V, self.Eta_all, self.mesh)
         print()
 
     def run_is_converge_check(self, tol_min, dt):
@@ -281,7 +282,7 @@ class Solver2D:
     # u_ref: local fastest speed
     # dx_ref: local 
     def time_get_dt(self, CFL):
-        V = self.state_UtoV(self.U)
+        V  = self.V
         u = V[1]
         v = V[2]
         T = V[3]
@@ -309,13 +310,13 @@ class Solver2D:
         self.mesh.update_H(H, Ht)
 
         # Cal primitive state
-        V = self.state_UtoV(U)
+        self.V, self.Eta_all = self.state_UtoV(U, self.V, self.Eta_all)
 
         # Prior-Computation Boundary Update #
-        self.boundary_update_U(U, V, self.mesh)
+        self.boundary_update_U(U, self.V, self.Eta_all, self.mesh)
 
         # Flux evaluation
-        E_inv, F_inv = self.flux_inviscid(U, V)
+        E_inv, F_inv = self.flux_inviscid(U, self.V)
 
         # Flux transformation
         E = E_inv
@@ -323,7 +324,7 @@ class Solver2D:
         E_hat, F_hat = self.flux_hat(U, E, F)
 
         # Flux splitting #
-        E_hat_p, E_hat_m, F_hat_p, F_hat_m = self.flux_split(U, V, E_hat, F_hat)
+        E_hat_p, E_hat_m, F_hat_p, F_hat_m = self.flux_split(U, self.V, E_hat, F_hat)
 
         # FDM discretization #
         E1F1 = self.FDM_discretize(E_hat_p, E_hat_m, F_hat_p, F_hat_m)
@@ -333,12 +334,12 @@ class Solver2D:
 
         # Shock Movment
         if self.is_shock_move:
-            Htt = self.shock_move_acceleration(U, V, self.mesh, dUdt)
+            Htt = self.shock_move_acceleration(U, self.V, self.mesh, dUdt)
         else: 
             Htt = 0
 
         # Post-Boundary Update #
-        self.boundary_update_dUdt(U, V, dUdt)
+        self.boundary_update_dUdt(U, self.V, dUdt)
 
 
         return dUdt, Ht, Htt
@@ -437,7 +438,7 @@ class Solver2D:
             self.Ht = np.zeros(self.Ht.shape)
         self.is_shock_move = is_shock_move
 
-    def shock_move_acceleration(self, U, V, mesh, dUdt):
+    def shock_move_acceleration(self, U, V, Eta, mesh, dUdt):
         # surface properties
         n = mesh.surface_n
         v_n = mesh.surface_v_n
@@ -607,18 +608,18 @@ class Solver2D:
 
 
     # Prior-Computation Boundary Update #
-    def boundary_update_U(self, U, V, mesh):
+    def boundary_update_U(self, U, V, Eta, mesh):
 
         # Ouetflow (left)
-        self.boundary_U_left(U, V)
+        self.boundary_U_left(U, V, Eta)
         # Outflow (right)
-        self.boundary_U_rght(U, V)
+        self.boundary_U_rght(U, V, Eta)
 
         # Wall (bottom)
-        self.boundary_U_bot(U, V)
+        self.boundary_U_bot(U, V, Eta)
 
         # Inflow (top)
-        self.boundary_U_top(U, V, mesh)
+        self.boundary_U_top(U, V, Eta, mesh)
 
     # Flux Boundary Update #
     def boundary_update_dUdt(self, U, V, dUdt):
@@ -633,15 +634,15 @@ class Solver2D:
 
     ## Top ##
     # Constant condition (eta = -1)
-    def boundary_U_top_constant(self, U, V, mesh):
+    def boundary_U_top_constant(self, U, V, Eta, mesh):
         U[0, -1] = self.rho_inf
         U[1, -1] = self.rho_inf*self.U_inf
         U[2, -1] = 0
         U[3, -1] = self.E_inf
 
-        V[:, -1] = self.state_UtoV(U[:, -1])
+        V[:, -1], Eta[:, -1] = self.state_UtoV(U[:, -1], V[:, -1], Eta[:, -1])
 
-    def boundary_U_top_SF(self, U, V, mesh):
+    def boundary_U_top_SF(self, U, V, Eta, mesh):
         n = mesh.surface_n
 
         gamma = self.gamma_ideal
@@ -669,7 +670,7 @@ class Solver2D:
         V[2, -1, :] = v_s
         V[3, -1, :] = T_s
 
-        U[:, -1] = self.state_VtoU(V[:, -1])
+        U[:, -1], Eta[:, -1] = self.state_VtoU(V[:, -1], Eta[:, -1])
 
     def boundary_dUdt_top_zero(self, dUdt):
         dUdt[:, -1, :] = 0
@@ -677,7 +678,7 @@ class Solver2D:
     ## Bottom ##
     # u, v = 0 and T = T_w
     # dpdy = 0
-    def boundary_U_wall_inviscid(self, U, V):
+    def boundary_U_wall_inviscid(self, U, V, Eta):
         mesh = self.mesh
         u = V[1, 0, :]
         v = V[2, 0, :]
@@ -715,10 +716,10 @@ class Solver2D:
         V[0, 0, :] = p_bot
     
         # convert back
-        U[:, 0] = self.state_VtoU(V[:, 0])
+        U[:, 0], Eta[:, 0] = self.state_VtoU(V[:, 0], Eta[:, 0])
 
 
-    def boundary_U_wall_extra(self, U, V):
+    def boundary_U_wall_extra(self, U, V, Eta):
         c_a = self.coeffs_extra_bot.reshape((-1, 1))
 
         stencil = c_a.shape[0] + 1
@@ -734,7 +735,7 @@ class Solver2D:
         V[2, 0, :] = 0
         V[3, 0, :] = self.T_w
 
-        U[:, 0] = self.state_VtoU(V[:, 0])
+        U[:, 0], Eta[:, 0] = self.state_VtoU(V[:, 0], Eta[:, 0])
 
     def boundary_dUdt_bot_zero(self, dUdt):
         dUdt[:, 0, :] = 0
@@ -766,7 +767,7 @@ class Solver2D:
 
     ## Right ##
     # Uses solver results (works for supersonic outlet)
-    def boundary_U_out_dUdt(self, U, V):
+    def boundary_U_out_dUdt(self, U, V, Eta):
         pass
 
     # Do nothing
@@ -774,7 +775,7 @@ class Solver2D:
         pass
 
     # Extrapolation
-    def boundary_U_left_extra(self, U, V):
+    def boundary_U_left_extra(self, U, V, Eta):
         c_a = self.coeffs_extra_left.reshape((1, -1))
 
         stencil = c_a.shape[1] + 1
@@ -784,10 +785,10 @@ class Solver2D:
             v_extra = np.sum(c_a*v, axis=1)
             V[idx_v, :, 0] = v_extra
 
-        U[:, :, 0] = self.state_VtoU(V[:, :, 0])
+        U[:, :, 0], Eta[:, :, 0] = self.state_VtoU(V[:, :, 0], Eta[:, :, 0])
 
     # Extrapolation
-    def boundary_U_rght_extra(self, U, V):
+    def boundary_U_rght_extra(self, U, V, Eta):
         c_a = self.coeffs_extra_rght.reshape((1, -1))
 
         stencil = c_a.shape[1] + 1
@@ -797,7 +798,7 @@ class Solver2D:
             v_extra = np.sum(c_a*v, axis=1)
             V[idx_v, :, -1] = v_extra
 
-        U[:, :, -1] = self.state_VtoU(V[:, :, -1])
+        U[:, :, -1], Eta[:, :, -1] = self.state_VtoU(V[:, :, -1], Eta[:, :, -1])
 
     #######
     # FDM #
@@ -1007,10 +1008,10 @@ class Solver2D:
 
         #check_negative_pressure(p)
 
-        return V
+        return V, Eta_all
 
     # primitive states [p, u, v, T]
-    def state_VtoU_ideal(self, V, U, Eta_all):
+    def state_VtoU_ideal(self, V, Eta_all):
         gamma = self.gamma_ideal
         R_air = self.R_air_ideal
 
@@ -1029,7 +1030,7 @@ class Solver2D:
         U[2] = rho*v
         U[3] = e
 
-        return U
+        return U, Eta_all
 
     def state_Utoe(self, U):
         rho = U[0]
@@ -1229,7 +1230,7 @@ if __name__ == "__main__":
     stencil = 3
     alpha = -1
 
-    solver.load("data/ideal_r1_ny21_nx21.dat")
+    #solver.load("data/ideal_r1_ny21_nx21.dat")
     
     #solver.init_guess_RG8()
 
@@ -1239,21 +1240,15 @@ if __name__ == "__main__":
     #N = [81, 81]
     #solver.remesh(N)
 
-    # Steady Run
-    #max_iter = 3000
-    #CFL = 0.8
-    #solver.set_is_shock_move(False)
-    #solver.run_steady(max_iter, CFL, tol_min=1e-2, temporal="RK3")
-
     # Shock moveboundary_dUdt_wall_inviscid
-    #max_iter = 10000
-    #CFL = 0.4
-    #solver.set_is_shock_move(False)
-    #solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
+    max_iter = 10000
+    CFL = 0.4
+    solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
 
     #solver.save("data/", "ideal")
     
     #
+    #solver.update_V()
     U = solver.U
     V = solver.V
     T = V[3]

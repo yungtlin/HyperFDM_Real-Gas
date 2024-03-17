@@ -83,8 +83,9 @@ class Species:
 
         f_trans = np.power(A, 3/2)
         e_trans = 3/2*R*T
+        cv_trans = 3/2*R
 
-        return f_trans, e_trans
+        return f_trans, e_trans, cv_trans
 
     def vibrational_mode(self):
         T = self.T
@@ -93,8 +94,9 @@ class Species:
 
         Q_vib = 1/(1 - np.exp(-theta_v/T))
         e_vib = (R*theta_v)/(np.exp(theta_v/T) - 1)
+        cv_vib = R*(theta_v/(2*T)/np.sinh(theta_v/(2*T)))**2
 
-        return Q_vib, e_vib
+        return Q_vib, e_vib, cv_vib
 
     def rotational_mode(self):
         T = self.T
@@ -104,8 +106,9 @@ class Species:
 
         Q_rot = T/(sigma*theta_r)
         e_rot = R*T
+        cv_rot = R
 
-        return Q_rot, e_rot
+        return Q_rot, e_rot, cv_rot
 
     def electronic_mode(self):
         T = self.T
@@ -118,8 +121,9 @@ class Species:
 
         a = (g_1/g_0)*np.exp(-theta_1/T)
         e_el = R*theta_1*a/(1 + a)
+        cv_el = R*(theta_1/T)**2*(a/(1 + a)**2)
 
-        return Q_el, e_el
+        return Q_el, e_el, cv_el
 
     ###########
     # Entropy #
@@ -183,11 +187,12 @@ class Monatomic(Species):
         self.e_0 = self.theta_z*self.k/self.m
 
     def compute_all(self):
-        self.f_trans, self.e_trans = self.translational_mode()
-        self.Q_el, self.e_el = self.electronic_mode()
+        self.f_trans, self.e_trans, self.cv_trans = self.translational_mode()
+        self.Q_el, self.e_el, self.cv_el = self.electronic_mode()
 
         self.fQ_int = self.f_trans*self.Q_el
         self.e_total = self.e_trans + self.e_el + self.e_0
+        self.cv_total = self.cv_trans + self.cv_el
 
     def compute_entropy(self, p):
         self.s_trans = self.entropy_translation(p)
@@ -218,13 +223,14 @@ class Diatomic(Species):
         self.e_0 = self.theta_z*self.k/self.m
 
     def compute_all(self):
-        self.f_trans, self.e_trans = self.translational_mode()
-        self.Q_rot, self.e_rot = self.rotational_mode()
-        self.Q_vib, self.e_vib = self.vibrational_mode()
-        self.Q_el, self.e_el = self.electronic_mode()
+        self.f_trans, self.e_trans, self.cv_trans = self.translational_mode()
+        self.Q_rot, self.e_rot, self.cv_rot = self.rotational_mode()
+        self.Q_vib, self.e_vib, self.cv_vib = self.vibrational_mode()
+        self.Q_el, self.e_el, self.cv_el = self.electronic_mode()
 
         self.fQ_int = self.f_trans*self.Q_rot*self.Q_vib*self.Q_el
         self.e_total = self.e_trans + self.e_rot + self.e_vib + self.e_el + self.e_0
+        self.cv_total = self.cv_trans + self.cv_rot + self.cv_vib + self.cv_el
 
     def compute_entropy(self, p):
         self.s_trans = self.entropy_translation(p)

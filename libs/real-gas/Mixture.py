@@ -182,8 +182,12 @@ class Mixture:
             assert len(eta0) == self.n_species
             eta_all = eta0       
 
-        self.eta_all, self.T = solve_rhoe_RG8_Newton(eta_all, T, rho, e, self,
-            is_print=is_print)
+        if T > 1800:
+            self.eta_all, self.T = solve_rhoe_RG8_Newton(eta_all, T, rho, e, self,
+                is_print=is_print)
+        else:
+            self.eta_all, self.T = solve_rhoe_RG8_lowtemp(eta_all, T, rho, e, self,
+                is_print=is_print)
 
         self.rho_mix = rho
         self.compute_all_eta(self.eta_all)
@@ -632,7 +636,6 @@ def solve_rhoe_RG8_Newton(eta_0_all, T_0, rho, e, mixture,
 
     return eta_all, T
 
-
 def res_RG8_eta(eta, T, rho, e, mixture):
     res = np.zeros(9)
 
@@ -679,7 +682,6 @@ def res_RG8_eta(eta, T, rho, e, mixture):
     res /= c
 
     return res
-
 
 def res_rhoe_RG8_prime(eta_all, T, rho, e, mixture, dx=1e-8):
     T0 = T
@@ -760,6 +762,90 @@ def res_rhoe_RG8_prime(eta_all, T, rho, e, mixture, dx=1e-8):
 
     return Jacobian
 
+def solve_rhoe_RG8_lowtemp(eta_0_all, T_0, rho, e, mixture,
+    omega_min=0.2, max_iter=100, tol=1e-7, is_print=True):
+    n_s = mixture.n_species
+    T = np.array(T_0)
+    eta_all = np.array(eta_0_all)
+    
+    R_hat = mixture.R_hat
+    ratio_NO = mixture.ratio_NO
+
+    M_hat_all = np.zeros(n_s)
+    for s_idx in range(n_s):
+        species = mixture.species_list[s_idx]
+        M_hat_all[s_idx] = species.M_hat
+
+
+    for iteration in range(max_iter):   
+        mixture.set_T(T)
+        K_p_all = mixture.compute_K_p(T)
+        rhoRT = rho*R_hat*T
+
+        for j in range(max_iter):
+            # idx| 0   1   2   3   4   5   6   7
+            # sp | N2, O2, NO, N,  O,  N+, O+, e-, 
+
+            # N_2, O_2 => N, O
+            eta_all[3] = np.sqrt(K_p_all[0]/rhoRT*eta_all[0])
+            eta_all[4] = np.sqrt(K_p_all[1]/rhoRT*eta_all[1])
+
+            # N, O => NO
+            eta_all[2] = eta_all[3]*eta_all[4]/(K_p_all[2]/rhoRT) 
+
+            # N, O => Np, Op, em
+            c1 = eta_all[3]*K_p_all[3]/rhoRT
+            c2 = eta_all[4]*K_p_all[4]/rhoRT
+
+            eta_all[5] = c1/np.sqrt(c1 + c2)
+            eta_all[6] = c2/np.sqrt(c1 + c2)
+            eta_all[7] = eta_all[5] + eta_all[6]
+
+            # rest => N_2, O_2
+            a = eta_all[2] + eta_all[3] + eta_all[5]
+            b = eta_all[2] + eta_all[4] + eta_all[6]
+            c = ratio_NO
+            d = 1 - np.sum(M_hat_all[2:]*eta_all[2:])
+
+            k1 = 2 + 2*c*M_hat_all[0]/M_hat_all[1]
+            k2 = 2*c*d/M_hat_all[1] + b*c - a
+
+            eta_all[0] = k2/k1
+            eta_all[1] = (d - M_hat_all[0]*eta_all[0])/M_hat_all[1]
+
+            res_N_2 = eta_all[3]**2/eta_all[0]/(K_p_all[0]/rhoRT) - 1
+            if abs(res_N_2) < tol:
+                break
+
+        c_all = M_hat_all*eta_all
+        e_mix = 0
+        cv_mix = 0
+        for s_idx in range(n_s):
+            species = mixture.species_list[s_idx]
+            e_mix += c_all[s_idx]*species.e_total
+            
+            #print(species.T, species.e_total)
+            cv_mix += c_all[s_idx]*species.cv_total
+        
+        de = e_mix - e
+        dT = -de/cv_mix
+
+        T = T + dT
+        res_0 = res_RG8_eta(eta_all, T, rho, e, mixture)
+
+        if np.abs(dT/T) < tol:
+            break
+
+    
+    res_0 = res_RG8_eta(eta_all, T, rho, e, mixture)
+    error = np.max(np.abs(res_0))
+
+    if is_print:
+        print("rho-e lowtemp iterations: %i, error: %.5e"%(iteration, error))
+
+    return eta_all, T
+        
+    # 
 
 if __name__ == "__main__":
     pass

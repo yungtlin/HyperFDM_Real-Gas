@@ -12,14 +12,16 @@ from FDM_EU import Solver2D
 from gen_rho_e_table import gen_rho_e_data
 
 if __name__ == "__main__":
+    # Case
+    N = [21, 21] # (will be overwritten by load)
+    M_inf = 10 # free stream Mach number
+
     # Load file
     load_folder = "data/"
-    load_file = "RG8_r1_ny21_nx21.dat"
+    load_file = "RG8_M%i_r1_ny21_nx21.dat"%(M_inf)
     load_path = load_folder + load_file
 
-    # Case
-    N = [21, 21] # (does not matter)
-    M_inf = 10 # free stream Mach number
+
     
     # If RG8 table is not existed, create one
     try:    
@@ -37,12 +39,10 @@ if __name__ == "__main__":
 
     # Starting RG8 (equilibrium) simulation
     solver.set_gas_model("RG8")    
-    solver.init_guess_RG8() # guess equilibrium state with RG8 table
 
-    iter_per_save = 1000 # short run
     CFL = 0.4
-
+    iter_per_save = 1000
     total_save = 100
     for i in range(total_save):
         solver.run_steady(iter_per_save, CFL, tol_min=1e-4, temporal="FE")
-        solver.save("%s/"%folder, "RG8")
+        solver.save(load_folder, "RG8_M%i"%M_inf)

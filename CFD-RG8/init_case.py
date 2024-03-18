@@ -27,6 +27,11 @@ if __name__ == "__main__":
         gen_rho_e_data() # 
         solver = Solver2D(M_inf, N)
     
+    # Mesh domain size
+    solver.mesh.init_H_polynomial(a_0=0.7, a_1=2, p=2)
+    solver.H = solver.mesh.H
+    solver.Ht = solver.mesh.Ht
+
     # FDM realted setting
     stencil = 3 # 1st-order
     alpha = -1  # fully upwind
@@ -35,15 +40,15 @@ if __name__ == "__main__":
 
     # Ideal gas simulation 
     solver.set_gas_model("ideal")
-    max_iter = 10000 # 
+    max_iter = 30000 # 
     CFL = 0.4
     solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
-    solver.save("%s/"%folder, "ideal")
+    solver.save("%s/"%folder, "ideal_M%i"%M_inf)
 
     # Starting RG8 (equilibrium) simulation
     solver.set_gas_model("RG8")    
     solver.init_guess_RG8() # guess equilibrium state with RG8 table
-    max_iter = 100 # short run
+    max_iter = 10 # short run
     CFL = 0.4
     solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
-    solver.save("%s/"%folder, "RG8")
+    solver.save("%s/"%folder, "RG8_M%i"%M_inf)

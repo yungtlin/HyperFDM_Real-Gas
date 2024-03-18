@@ -683,6 +683,7 @@ class Solver2D:
     # dpdy = 0
     def boundary_U_wall_inviscid(self, U, V, Eta):
         mesh = self.mesh
+        rho = U[0, 0, :]
         u = V[1, 0, :]
         v = V[2, 0, :]
         u_t, u_r = mesh.get_wall_velocity(u, v)
@@ -706,16 +707,16 @@ class Solver2D:
         T_bot = np.sum(b*Tn, axis=0)
         V[3, 0, :] = T_bot
 
-        # dp/deta = p*u_t**2*H/(R_air*T*r_c)
+        # dp/deta = rho*u_t**2*H/r_c
         # => dp/deta = p*c
         H = self.H
         r_c = self.r_c
-        c = u_t**2*H/(self.R_air_ideal*T_bot*r_c)
+        c = rho*u_t**2*H/r_c
 
-        # a0*p0 + an*pn = p0*c
-        # => p0 = (an*pn)/(c-a0)
+        # a0*p0 + an*pn = c
+        # => p0 = (c - an*pn)/a0
         pn = V[0, 1:stencil, :]
-        p_bot = np.sum(an*pn, axis=0)/(c - a0)
+        p_bot = (c - np.sum(an*pn, axis=0))/a0
         V[0, 0, :] = p_bot
     
         # convert back
@@ -1044,6 +1045,7 @@ class Solver2D:
         return e
 
     def state_UtoV_RG8(self, U, V, Eta_all):
+        print("RG8 utov")
         u_shape = U.shape
         n_U = u_shape[0]
         N = u_shape[1:]
@@ -1066,14 +1068,63 @@ class Solver2D:
             T0 = T_1d[idx]
             Eta0 = Eta_1d[:, idx]
 
-            self.model_RG8.compute_rhoe(rho, e, T0=T0, eta0=Eta0)
+            self.model_RG8.compute_rhoe(rho, e, T0=T0, eta0=Eta0, is_print=False)
 
+            T_1d[idx] = self.model_RG8.T
+            p_1d[idx] = self.model_RG8.p_mix
+            Eta_1d[:, idx] = self.model_RG8.eta_all
+        
+        V_new = np.zeros((n_U, *N))
+        Eta_new = Eta_1d.reshape((n_s, *N))
 
+        V_new[0] = p_1d.reshape(N)
+        V_new[1] = u_1d.reshape(N)
+        V_new[2] = v_1d.reshape(N)
+        V_new[3] = T_1d.reshape(N)
 
-        return V, Eta_all
+        return V_new, Eta_new
 
     def state_VotU_RG8(self, V, Eta_all):
-        pass
+        print("RG8 vtou")
+        v_shape = V.shape
+        n_U = v_shape[0]
+        N = v_shape[1:]
+        n_s = Eta_all.shape[0]
+
+        p_1d = V[0].reshape(-1)
+        T_1d = V[3].reshape(-1)
+        Eta_1d = Eta_all.reshape((n_s, -1))
+
+        rho_1d = np.zeros(p_1d.shape)
+        e_1d = np.zeros(p_1d.shape)
+
+        n_X = p_1d.shape[0]
+        for idx in range(n_X):
+            p = p_1d[idx]
+            T = T_1d[idx]
+            eta = Eta_1d[:, idx]
+
+            p_all = self.model_RG8.compute_p_all(p, eta)
+            self.model_RG8.compute_pT(p, T, p_s0=p_all, is_print=False)
+            # rho, e
+            rho_1d[idx] = self.model_RG8.rho_mix
+            e_1d[idx] = self.model_RG8.e_mix
+            Eta_1d[:, idx] = self.model_RG8.eta_all
+
+        rho = rho_1d.reshape(N)
+        e = e_1d.reshape(N)
+        u = V[1]
+        v = V[2]
+
+        U_new = np.zeros((n_U, *N))
+        U_new[0] = rho
+        U_new[1] = rho*u
+        U_new[2] = rho*v
+        U_new[3] = rho*e + 0.5*rho*(u**2 + v**2)
+
+        Eta_new = Eta_1d.reshape((n_s, *N))
+
+        return U_new, Eta_new
 
     ##########
     # Remesh #
@@ -1270,6 +1321,7 @@ if __name__ == "__main__":
 
     solver.set_gas_model("RG8")    
     solver.init_guess_RG8()
+    #solver.update_V()
 
 
     solver.set_FDM_stencil(stencil, alpha)
@@ -1279,14 +1331,13 @@ if __name__ == "__main__":
     #solver.remesh(N)
 
     # Shock moveboundary_dUdt_wall_inviscid
-    #max_iter = 10000
-    #CFL = 0.4
-    #solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
+    max_iter = 100
+    CFL = 0.4
+    solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
 
     #solver.save("data/", "ideal")
-    
     #
-    solver.update_V()
+    #solver.update_V()
     U = solver.U
     V = solver.V
     T = V[3]
@@ -1296,7 +1347,7 @@ if __name__ == "__main__":
     #XX = p/solver.p_inf
 
     #XX = V[0]
-
+    print(np.min(XX), np.max(XX))
     plt.figure(figsize=(5.8, 7))
     plt.title(r"Euler - Ideal Gas ($M_\infty$: %.1f)"%(M_inf), fontsize=14)
     #solver.plot_solution(XX, level=np.linspace(4.25, 7.5, 14))
@@ -1312,4 +1363,5 @@ if __name__ == "__main__":
     #plt.xlim([-1.15, -0.9])
     #plt.ylim([0, 0.6])
     plt.grid()
-    #plt.show()
+    plt.show()
+    

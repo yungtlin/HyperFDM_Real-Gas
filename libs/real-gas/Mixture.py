@@ -156,6 +156,11 @@ class Mixture:
     ###########
     # Compute #
     ###########
+    def compute_p_all(self, p_mix, eta_all):
+        M_hat_mix = 1/np.sum(eta_all)
+        p_all = p_mix*M_hat_mix*eta_all
+        return p_all
+
     def compute_pT(self, p_mix, T, p_s0=[], is_print=True):
 
         self.set_T(T)
@@ -183,13 +188,14 @@ class Mixture:
             eta_all = eta0       
 
         if T > 1800:
-            self.eta_all, self.T = solve_rhoe_RG8_Newton(eta_all, T, rho, e, self,
+            self.eta_all, T = solve_rhoe_RG8_Newton(eta_all, T, rho, e, self,
                 is_print=is_print)
         else:
-            self.eta_all, self.T = solve_rhoe_RG8_lowtemp(eta_all, T, rho, e, self,
+            self.eta_all, T = solve_rhoe_RG8_lowtemp(eta_all, T, rho, e, self,
                 is_print=is_print)
 
         self.rho_mix = rho
+        self.set_T(T)
         self.compute_all_eta(self.eta_all)
 
         err = np.abs((self.e_mix - e)/e)

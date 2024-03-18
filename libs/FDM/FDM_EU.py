@@ -1160,6 +1160,12 @@ class Solver2D:
         U_old = self.U
         U_new = self.remesh_state(mesh_new, mesh_old, U_old)
 
+        U_old = self.V
+        V_new = self.remesh_state(mesh_new, mesh_old, U_old)
+
+        U_old = self.Eta_all
+        Eta_new = self.remesh_state(mesh_new, mesh_old, U_old)
+
         # Assign #
         self.N = N_new
         self.mesh = mesh_new
@@ -1167,7 +1173,8 @@ class Solver2D:
         self.Ht = Ht_new
         self.mesh.update_H(self.H, self.Ht)
         self.U = U_new
-
+        self.V = V_new
+        self.Eta_all = Eta_new
 
     def remesh_state(self, mesh_new, mesh_old, U_old):
         nU = U_old.shape[0]

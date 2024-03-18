@@ -614,7 +614,7 @@ def solve_rhoe_RG8_Newton(eta_0_all, T_0, rho, e, mixture,
         dU = -np.matmul(jac_inv, res).reshape(-1)
 
         # Adaptive URF updating
-        x = np.max(np.abs(dU))
+        x = np.max(np.abs(dU)) + 1e-30
         omega = 1 - (1 - omega_min)*np.exp(-1/x)
 
         # Linear updating

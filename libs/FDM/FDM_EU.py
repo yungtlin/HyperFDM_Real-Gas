@@ -115,6 +115,7 @@ class Solver2D:
         self.interp_RG8 = Table_RG8_rhoe(path=path)
     
     def set_gas_model(self, gas_model):
+        self.gas_model = gas_model
         print("Using: %s gas model"%gas_model)
         if gas_model == "ideal":
             self.state_UtoV = self.state_UtoV_ideal
@@ -187,6 +188,7 @@ class Solver2D:
         # Update boundary condition for the result
         self.mesh.update_H(self.H, self.Ht)
 
+        self.update_V()
         self.boundary_update_U(self.U, self.V, self.Eta_all, self.mesh)
         print()
 
@@ -707,16 +709,29 @@ class Solver2D:
         T_bot = np.sum(b*Tn, axis=0)
         V[3, 0, :] = T_bot
 
-        # dp/deta = rho*u_t**2*H/r_c
-        # => dp/deta = p*c
-        H = self.H
-        r_c = self.r_c
-        c = rho*u_t**2*H/r_c
+        if self.gas_model == "ideal":
+            # dp/deta = p*u_t**2*H/(R_air*T*r_c)
+            # => dp/deta = p*c
+            H = self.H
+            r_c = self.r_c
+            c = u_t**2*H/(self.R_air_ideal*T_bot*r_c)
 
-        # a0*p0 + an*pn = c
-        # => p0 = (c - an*pn)/a0
-        pn = V[0, 1:stencil, :]
-        p_bot = (c - np.sum(an*pn, axis=0))/a0
+            # a0*p0 + an*pn = p0*c
+            # => p0 = (an*pn)/(c-a0)
+            pn = V[0, 1:stencil, :]
+            p_bot = np.sum(an*pn, axis=0)/(c - a0)
+
+        elif self.gas_model == "RG8":
+            # dp/deta = rho*u_t**2*H/r_c
+            # => dp/deta = p*c
+            H = self.H
+            r_c = self.r_c
+            c = rho*u_t**2*H/r_c
+
+            # a0*p0 + an*pn = c
+            # => p0 = (c - an*pn)/a0
+            pn = V[0, 1:stencil, :]
+            p_bot = (c - np.sum(an*pn, axis=0))/a0
         V[0, 0, :] = p_bot
     
         # convert back
@@ -1045,7 +1060,6 @@ class Solver2D:
         return e
 
     def state_UtoV_RG8(self, U, V, Eta_all):
-        print("RG8 utov")
         u_shape = U.shape
         n_U = u_shape[0]
         N = u_shape[1:]
@@ -1085,7 +1099,6 @@ class Solver2D:
         return V_new, Eta_new
 
     def state_VotU_RG8(self, V, Eta_all):
-        print("RG8 vtou")
         v_shape = V.shape
         n_U = v_shape[0]
         N = v_shape[1:]
@@ -1208,6 +1221,10 @@ class Solver2D:
             for i in range(self.N[0]):
                 writeline(file, np.float64, self.U[j, i])
 
+        for j in range(self.nU):
+            for i in range(self.N[0]):
+                writeline(file, np.float64, self.V[j, i])
+
         for j in range(self.n_species):
             for i in range(self.N[0]):
                 writeline(file, np.float64, self.Eta_all[j, i])
@@ -1234,12 +1251,16 @@ class Solver2D:
             for i in range(self.N[0]):
                 self.U[j][i] = readline(file, np.float64, self.N[1])
 
+        self.V = np.zeros((self.nU, self.N[0], self.N[1]))
+        for j in range(self.nU):
+            for i in range(self.N[0]):
+                self.V[j][i] = readline(file, np.float64, self.N[1])
+
         self.Eta_all = np.zeros((n_species, self.N[0], self.N[1]))
         for j in range(n_species):
             for i in range(self.N[0]):
                 self.Eta_all[j][i] = readline(file, np.float64, self.N[1])
 
-        self.update_V()
         file.close()
 
     ########
@@ -1317,11 +1338,10 @@ if __name__ == "__main__":
     stencil = 3
     alpha = -1
 
-    solver.load("data/ideal_r1_ny21_nx21.dat")
-
     solver.set_gas_model("RG8")    
-    solver.init_guess_RG8()
-    #solver.update_V()
+    solver.load("data/RG8_r1_ny21_nx21.dat")
+
+    #solver.init_guess_RG8()
 
 
     solver.set_FDM_stencil(stencil, alpha)
@@ -1330,12 +1350,11 @@ if __name__ == "__main__":
     #N = [81, 81]
     #solver.remesh(N)
 
-    # Shock moveboundary_dUdt_wall_inviscid
-    max_iter = 100
+    max_iter = 10
     CFL = 0.4
     solver.run_steady(max_iter, CFL, tol_min=1e-4, temporal="FE")
 
-    #solver.save("data/", "ideal")
+    solver.save("data/", "RG8")
     #
     #solver.update_V()
     U = solver.U
@@ -1363,5 +1382,5 @@ if __name__ == "__main__":
     #plt.xlim([-1.15, -0.9])
     #plt.ylim([0, 0.6])
     plt.grid()
-    plt.show()
+    #plt.show()
     

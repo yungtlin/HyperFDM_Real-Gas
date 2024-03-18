@@ -111,7 +111,7 @@ class Solver2D:
         self.set_ideal_gas()
 
     def set_RG8_table(self):
-        path = "../real-gas/RG8-rho-e-table.dat"
+        path = "RG8-rho-e-table.dat"
         self.interp_RG8 = Table_RG8_rhoe(path=path)
     
     def set_gas_model(self, gas_model):

@@ -88,4 +88,5 @@ if __name__ == "__main__":
     plt.ylim(ylim)
     plt.xlim([0, 15000])
     plt.grid(which="both")
-    plt.show()
+    plt.savefig("RG8-Z.png")
+    plt.savefig("RG8-Z.pdf")

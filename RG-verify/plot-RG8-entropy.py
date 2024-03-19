@@ -83,10 +83,11 @@ if __name__ == "__main__":
     ax.set_yticks(np.linspace(ylim[0], ylim[1], 8))
     ax.set_yticks(np.linspace(ylim[0], ylim[1], 29), minor=True)
 
-    plt.ylabel(r"Entropy $\left(\frac{ZS}{R}\right)$", fontsize=12)
+    plt.ylabel(r"Entropy $\left(\frac{Zs}{R}\right)$", fontsize=12)
     plt.xlabel(r"Temperature ($T$)", fontsize=12)
 
     #plt.ylim(ylim)
     plt.xlim([0, 15000])
     plt.grid(which="both")
-    plt.show()
+    plt.savefig("RG8-S.png")
+    plt.savefig("RG8-S.pdf")

@@ -82,10 +82,11 @@ if __name__ == "__main__":
     ax.set_yticks(np.linspace(ylim[0], ylim[1], 6))
     ax.set_yticks(np.linspace(ylim[0], ylim[1], 26), minor=True)
 
-    plt.ylabel(r"Internal Energy $\left(\frac{ZE}{RT}\right)$", fontsize=12)
+    plt.ylabel(r"Internal Energy $\left(\frac{Ze}{RT}\right)$", fontsize=12)
     plt.xlabel(r"Temperature ($T$)", fontsize=12)
 
     plt.ylim(ylim)
     plt.xlim([0, 15000])
     plt.grid(which="both")
-    plt.show()
+    plt.savefig("RG8-E.png")
+    plt.savefig("RG8-E.pdf")

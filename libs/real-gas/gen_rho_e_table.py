@@ -48,11 +48,13 @@ def gen_rho_e_data(path="RG8-rho-e-table.dat"):
 
 
 if __name__ == "__main__":
-    gen_rho_e_data()
-
     # load simulation results
     file = "RG8-rho-e-table.dat"
-    data_RG8 = np.load(file, mmap_mode="r")
+    try:
+        data_RG8 = np.load(file, mmap_mode="r")
+    except FileNotFoundError:
+        gen_rho_e_data() # 
+        data_RG8 = np.load(file, mmap_mode="r")
     n_U, n_p, n_T = data_RG8.shape
 
     rho = data_RG8[0]
@@ -62,6 +64,11 @@ if __name__ == "__main__":
     eta_all = data_RG8[4:]
     import matplotlib.pyplot as plt
     import matplotlib.cm as cm
+    rc = {"font.family" : "serif", 
+          "mathtext.fontset" : "stix"}
+    plt.rcParams.update(rc)
+    plt.rcParams["font.serif"] = ["Times New Roman"] + plt.rcParams["font.serif"] 
+
 
     U = np.log(eta_all[7])
     X = np.log(rho)
@@ -74,18 +81,32 @@ if __name__ == "__main__":
     u = U.reshape(-1)
     interp = LinearNDInterpolator(list(zip(x, y)), u)
 
+    fig, ax = plt.subplots(figsize=(7, 5)) 
+
     rho_0 = 0.0225
     e_0 = 1.4e7
     x_0 = np.log(rho_0)
     y_0 = np.log(e_0)
     u0 = interp(x_0, y_0)
 
-    plt.plot(x_0, y_0, "xk")
-    print(u0)
 
-    level = 11
+    #plt.plot(x_0, y_0, "xk")
+    #print(u0)
+
+    level = np.linspace(1000, 15000, 50) 
+    plt.plot(x, y, "sr", markersize=2, label="source data")
+    plt.legend(fontsize=10)
+
     plt.contourf(X, Y, U, level, 
             cmap=cm.jet, extend="both")
-    plt.colorbar()
+
+    ticks = np.linspace(1000, 15000, 8) 
+    cbar = plt.colorbar(ticks=ticks)
+    cbar.set_label("Temperature (K)")
+
+
+    plt.ylabel(r"Internal energy ($\ln(e)$)", fontsize=12)
+    plt.xlabel(r"Density ($\ln(\rho)$)", fontsize=12)
     plt.ylim([12, 19])
-    plt.show()
+    plt.savefig("interp_table.png")
+    plt.savefig("interp_table.pdf")

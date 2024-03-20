@@ -13,9 +13,9 @@ from gen_rho_e_table import gen_rho_e_data
 
 if __name__ == "__main__":
     # Case
-    model = "RG8"
-    M_inf = 10 # free stream Mach number
-    N = [21, 21] # (will be overwritten by load)
+    model = "ideal"
+    M_inf = 30 # free stream Mach number
+    N = [41, 41] # (will be overwritten by load)
 
     # Load file
     load_folder = "data/"
@@ -37,8 +37,8 @@ if __name__ == "__main__":
     XX = solver.V[3]
 
     plt.figure(figsize=(5.8, 7))
-    level = np.linspace(300, 3500, 17)
-    ticks = np.linspace(300, 3500, 9) 
+    level = np.linspace(10000, 55000, 46)
+    ticks = np.linspace(10000, 55000, 10) 
 
     # plot setting
     rc = {"font.family" : "serif", 
@@ -46,13 +46,13 @@ if __name__ == "__main__":
     plt.rcParams.update(rc)
     plt.rcParams["font.serif"] = ["Times New Roman"] + plt.rcParams["font.serif"] 
 
-    title = "Ideal Gas" if model == "ideal" else "Real Gas (Converged)"
+    title = "Ideal Gas" if model == "ideal" else "Real Gas"
 
     #level = np.linspace(0, 15000, 101)
     plt.title(r"%s ($M_\infty$: %.1f)"%(title, M_inf), fontsize=14)
     solver.plot_solution(XX, level=level)
     print(np.max(XX))
-    solver.mesh.plot_mesh()
+    #solver.mesh.plot_mesh()
 
     cbar = plt.colorbar(format="%.0f", ticks=ticks)
     #cbar = plt.colorbar(format="%.0f")
@@ -62,6 +62,6 @@ if __name__ == "__main__":
     plt.xlim([-2, 0])
     plt.ylim([0, 3])
     plt.grid()
-    file = "%s_c_M%i_n%i"%(model, int(M_inf), N[0])
+    file = "%s_0_M%i_n%i"%(model, int(M_inf), N[0])
     plt.savefig(file + ".pdf")
     plt.savefig(file + ".png")

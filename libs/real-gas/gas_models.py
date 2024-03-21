@@ -18,7 +18,7 @@ def get_8_species():
     # Q_el is from Lec. note 2 - p34
     comp_N = {"N": 1}
     species_N = [comp_N, 14, T]
-    constants_N = [56500, 4, 0, 0] 
+    constants_N = [56500, 4, 10, 27700] # Hansen 
     N = Monatomic(species_N, constants_N)
 
     comp_O = {"O": 1}
@@ -28,17 +28,17 @@ def get_8_species():
 
     comp_Np = {"N": 1, "+": 1}
     species_Np = [comp_Np, 14, T]
-    constants_Np = [225500, 4, 0, 0] # Lec. note 2
+    constants_Np = [225500, 1, 8, 145] # Hansen 
     Np = Monatomic(species_Np, constants_Np)
 
     comp_Op = {"O": 1, "+": 1}
     species_Op = [comp_Op, 16, T]
-    constants_Op = [187750, 5, 4, 270] # Lec. note 2
+    constants_Op = [187750, 4, 10, 38600] # Hansen 
     Op = Monatomic(species_Op, constants_Op)
 
     comp_em = {"e": 1, "-": 1}
     species_em = [comp_em, 5.486e-4, T]
-    constants_em = [0, 2, 0, 0] # Lec. note 3
+    constants_em = [0, 2, 0, 0] # Hansen 
     em = Monatomic(species_em, constants_em)
 
     ## Diatomic ##

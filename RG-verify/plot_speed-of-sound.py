@@ -21,8 +21,8 @@ if __name__ == "__main__":
     n_p, n_T, n_U = data_RG8.shape
 
     # load ref. data (Hansen-1958a)
-    file_csv = "csv/speed-of-sound.csv" # (Hansen-1958a)
-    #file_csv = "csv/speed-of-sound-b.csv" # (Hansen-1958b)
+    #file_csv = "csv/speed-of-sound.csv" # (Hansen-1958a)
+    file_csv = "csv/speed-of-sound-b.csv" # (Hansen-1958b)
     data_csv = np.loadtxt(file_csv, skiprows=1, delimiter=",")
 
     c_table = []
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     ax.add_artist(legend1)
 
     # Legend (style)
-    label2 = ["Computed", "Hansen and Heims (1958a)"]
+    label2 = ["Computed", "Hansen and Heims (1958b)"]
     legend2 = plt.legend([lines[i] for i in range(2)], label2,
         title="Source", title_fontsize=9, 
         loc="upper left", fontsize=9)
